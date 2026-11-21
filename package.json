@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test --no-warnings tests/*.test.mjs"
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node --test --no-warnings tests/*.test.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@vercel/analytics": "1.6.1",
@@ -16,6 +18,7 @@
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
