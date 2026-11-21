@@ -18,11 +18,11 @@
   --cyan: #8fd0ea;
   --rewind: #9fb5ff;
   --chaos: #ff8a5c;
-  /* One family throughout: Fira Sans. The "display" and "data" roles differ by
-     weight, size and tabular figures rather than by typeface. */
+  /* The Fira family: Fira Sans for text and headings, Fira Mono for live
+     readouts, small labels and key caps. */
   --serif: var(--font-fira-sans), system-ui, sans-serif;
   --sans: var(--font-fira-sans), system-ui, sans-serif;
-  --mono: var(--font-fira-sans), system-ui, sans-serif;
+  --mono: var(--font-fira-mono), ui-monospace, monospace;
   --radius: 10px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -73,7 +73,6 @@
 
 .eyebrow {
   font-family: var(--mono);
-  font-weight: 500;
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;

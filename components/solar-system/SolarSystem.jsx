@@ -168,7 +168,7 @@ export default function SolarSystem() {
     const gravity = createGravityLayer();
     const rootStyle = getComputedStyle(document.documentElement);
     const labelFont = rootStyle.getPropertyValue("--font-fira-sans").trim() || "sans-serif";
-    const monoFont = labelFont;
+    const monoFont = rootStyle.getPropertyValue("--font-fira-mono").trim() || "monospace";
 
     // What scenario events are allowed to change.
     const ctl = {

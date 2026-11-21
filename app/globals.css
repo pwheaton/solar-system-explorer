@@ -2,6 +2,7 @@
 
 @theme inline {
   --font-sans: var(--font-fira-sans);
+  --font-mono: var(--font-fira-mono);
 }
 
 html, body {
