@@ -120,6 +120,10 @@ npx pnpm test       # physics and scenario tests (Node's built-in test runner)
 npx pnpm build      # production build
 ```
 
+### Physics runs in a background thread
+
+The simulation runs in a [Web Worker](https://developer.mozilla.org/docs/Web/API/Web_Workers_API), so physics never blocks drawing or input. Each frame the page asks the worker to advance, then draws from the latest snapshot it sent back: positions, belts (as transferable `Float32Array`s) and new collision flashes. If a browser can't run the worker, the same engine runs on the main thread instead, automatically. Add `?worker=0` to the URL to force that, for example to compare.
+
 Add `?perf=1` to the URL to see a timing overlay: frames per second, and how many milliseconds each frame spends on physics, drawing, path prediction and the panels.
 
 The tests check what's easy to break without noticing:
@@ -140,7 +144,7 @@ app/
   layout.tsx              Fonts, page metadata
   page.tsx                Renders the simulator
 components/solar-system/
-  SolarSystem.jsx         Main component: simulation loop, input, URL sync
+  SolarSystem.jsx         Main component: render loop, input, URL sync
   ControlPanel.jsx        Right-hand panel: scenarios, chaos lab, belts, view, bodies
   TimeDock.jsx            Bottom dock: play, rewind, speed, launch, date
   ShortcutsDrawer.jsx     Left-edge pull tab with keyboard shortcuts / gestures
@@ -149,6 +153,10 @@ components/solar-system/
   ui.jsx                  Shared controls, icons, scenario glyphs
   styles.module.css       All UI styling ("modern orrery" theme)
 lib/sim/
+  engine.js               Per-frame simulation logic (speed, events, ramps, rewind limit)
+  host.js                 Runs the engine in a Web Worker, or on the main thread as a fallback
+  sim.worker.js           The physics worker
+  snapshot.js             What the worker sends the page each frame (and the page's "mirror")
   physics.js              N-body integrator, belts, trails (time-reversible)
   ephemeris.js            Orbital elements → positions and velocities
   bodies.js               Sun, planets and Pluto with JPL orbital elements

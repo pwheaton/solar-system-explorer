@@ -2,16 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { centerOn, defaultCamera, makeView, screenToWorld, zoomAt } from "@/lib/sim/camera.js";
-import { DT, PHYSICS_BUDGET_MS } from "@/lib/sim/constants.js";
-import {
-  addBelt, advance, beltStats, clearLaunched, clearTrails, createSystem, removeBelt, setMassMultipliers,
-} from "@/lib/sim/physics.js";
+import { createHost } from "@/lib/sim/host.js";
 import { createGravityLayer, drawFrame, hitTest, updateGravityLayer } from "@/lib/sim/render.js";
 import { randomSeed } from "@/lib/sim/rng.js";
-import {
-  DRAG_PX_PER_ORBIT_SPEED, LAUNCH_TYPES, MAX_LAUNCHED, circularSpeed, launch, launchedCount, predictPath,
-} from "@/lib/sim/sandbox.js";
-import { SCENARIOS, SCENARIO_DEFAULTS, getScenario, rampValue } from "@/lib/sim/scenarios.js";
+import { DRAG_PX_PER_ORBIT_SPEED, LAUNCH_TYPES, MAX_LAUNCHED, circularSpeed, predictPath } from "@/lib/sim/sandbox.js";
+import { SCENARIOS, SCENARIO_DEFAULTS, getScenario } from "@/lib/sim/scenarios.js";
 import { readUrlState, writeUrlState } from "@/lib/url-state.js";
 import ControlPanel from "./ControlPanel";
 import PlanetInfo from "./PlanetInfo";
@@ -28,13 +23,18 @@ const EMPTY_HUD = {
   date: "", years: 0, rate: 0, limited: false, belts: {}, bodies: [], log: [], escaped: [], launched: 0,
   debris: { clouds: 0, pieces: 0 },
 };
-const ESCAPE_AU = 100;
-
-/** Keep developer switches like ?perf=1 when the URL is rewritten. */
+/** Keep developer switches (?perf=1, ?worker=0) when the URL is rewritten. */
 function withDevParams(qs) {
-  if (!new URLSearchParams(window.location.search).has("perf")) return qs;
-  return qs ? `${qs}&perf=1` : "?perf=1";
+  const now = new URLSearchParams(window.location.search);
+  const keep = ["perf", "worker"].filter((k) => now.has(k)).map((k) => `${k}=${now.get(k)}`);
+  if (!keep.length) return qs;
+  return qs ? `${qs}&${keep.join("&")}` : `?${keep.join("&")}`;
 }
+
+const formatDate = (start, t, opts) => {
+  const d = new Date(start.getTime() + t * 365.25 * 86400000);
+  return isNaN(d) ? "" : d.toLocaleDateString(undefined, opts);
+};
 
 /** Turn a press-and-drag on screen into a launch: position and velocity relative to the Sun. */
 function launchFromDrag(sys, view, from, to) {
@@ -77,7 +77,12 @@ export default function SolarSystem() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const canvasRef = useRef(null);
-  const sysRef = useRef(null);
+  // Where the simulation runs (a Web Worker, or the main thread as a fallback).
+  // host.mirror is the system as last reported, for drawing and hit-testing.
+  const hostRef = useRef(null);
+  const latestRef = useRef(null);        // last tick result from the host
+  const pendingFollowRef = useRef(null); // body to follow once a load finishes
+  const handlersRef = useRef({});
   const cameraRef = useRef({ ...defaultCamera(), follow: null });
   const viewRef = useRef(null);
   const optsRef = useRef({});
@@ -135,15 +140,15 @@ export default function SolarSystem() {
 
   // ─── Scenarios ─────────────────────────────────────────────────
   const loadScenario = useCallback((id, opts = {}) => {
+    const host = hostRef.current;
+    if (!host) return;
     const sc = getScenario(id);
-    const seed = opts.seed ?? sysRef.current?.seed ?? randomSeed();
-    const sys = createSystem(opts.date ?? new Date(), seed);
-    sc.setup?.(sys);
-    sys.events = (sc.events || []).map((e) => ({ ...e, done: false }));
-    sys.ramp = sc.ramp ? { ...sc.ramp } : null;
-    sysRef.current = sys;
-
+    const seed = opts.seed ?? host.mirror?.seed ?? randomSeed();
     const s = { ...SCENARIO_DEFAULTS, ...sc.settings, ...opts.overrides };
+    // Settings first, so the very first tick of the new system uses them.
+    host.configure({ speed: s.speed, paused: false, reverse: false, sunMass: s.sunMass, jupMass: s.jupMass });
+    host.load({ scenario: sc.id, date: opts.date ?? new Date(), seed, belts: s.belts });
+    latestRef.current = null;
     setScenarioId(sc.id);
     setSysVersion((v) => v + 1);
     setSpeed(s.speed);
@@ -159,16 +164,29 @@ export default function SolarSystem() {
     setReverse(false);
     setSelected(null);
 
-    const followName = opts.follow ?? s.follow;
-    const followIndex = followName ? sys.bodies.findIndex((b) => b.name === followName) : -1;
+    // Bodies are only known once the load finishes (see onLoaded).
+    pendingFollowRef.current = opts.follow ?? s.follow ?? null;
     cameraRef.current = { ...defaultCamera(), zoom: s.zoom, follow: null };
     setFollowState(null);
-    if (followIndex >= 0) setFollow(followIndex);
 
     if (!opts.quiet) notify(sc.blurb, 9000, sc.name);
-  }, [notify, setFollow]);
+  }, [notify]);
 
   const reset = useCallback(() => loadScenario(scenarioId, { quiet: true }), [loadScenario, scenarioId]);
+
+  // ─── The simulation host ───────────────────────────────────────
+  // Created before anything else touches it (effects run in order).
+  useEffect(() => {
+    const preferWorker = new URLSearchParams(window.location.search).get("worker") !== "0";
+    const host = createHost({
+      preferWorker,
+      onLoaded: (m) => handlersRef.current.onLoaded?.(m),
+      onResult: (r) => handlersRef.current.onResult?.(r),
+    });
+    hostRef.current = host;
+    if (process.env.NODE_ENV !== "production") window.__host = host;
+    return () => { host.dispose(); hostRef.current = null; };
+  }, []);
 
   // First load: restore from the URL if there's a shared link. This has to
   // happen after hydration (the URL and window size don't exist on the server),
@@ -194,11 +212,12 @@ export default function SolarSystem() {
 
   // Keep the URL in sync so the address bar is always a shareable link.
   const urlState = () => {
-    const sys = sysRef.current;
-    return sys && withDevParams(writeUrlState({
-      scenario: scenarioId, date: sys.startDate, seed: sys.seed, speed, sunMass, jupMass,
-      ramping: !!sys.ramp, sunByEvent: sunByEventRef.current, distExp, sizeMult, showTrails, showGrav, belts,
-      follow: follow !== null ? sys.bodies[follow]?.name : null,
+    const m = hostRef.current?.mirror;
+    return m && withDevParams(writeUrlState({
+      scenario: scenarioId, date: m.startDate, seed: m.seed, speed, sunMass, jupMass,
+      ramping: !!latestRef.current?.ramping, sunByEvent: sunByEventRef.current,
+      distExp, sizeMult, showTrails, showGrav, belts,
+      follow: follow !== null ? m.bodies[follow]?.name : null,
     }));
   };
   const urlStateRef = useRef(urlState);
@@ -231,11 +250,78 @@ export default function SolarSystem() {
 
   // Moving the Jupiter slider by hand takes over from a scenario's mass ramp.
   const setJupMassByHand = useCallback((v) => {
-    if (sysRef.current) sysRef.current.ramp = null;
+    hostRef.current?.cancelRamp();
     setJupMass(v);
   }, []);
 
-  // ─── Simulation + render loop ──────────────────────────────────
+  // Turn a tick result plus the mirror into what the panels show.
+  const buildHud = (r) => {
+    const m = hostRef.current?.mirror;
+    if (!m) return;
+    const o = optsRef.current;
+    if (r.ramping && r.jupiterMult !== o.jupMass) setJupMass(r.jupiterMult);
+    const sun = m.bodies[0];
+    const sel = o.selected !== null ? m.bodies[o.selected] : null;
+    setHud({
+      date: formatDate(m.startDate, r.t, { year: "numeric", month: "short", day: "numeric" }),
+      years: r.t,
+      rate: r.rate,
+      limited: r.limited,
+      belts: r.hud.belts,
+      debris: r.hud.debris,
+      bodies: m.bodies.map((b) => ({
+        name: b.name, color: b.color, isDwarf: b.isDwarf, isStar: b.isStar, isSun: b.isSun,
+        removed: b.removed, a: b.el?.[0], launched: b.launched, merged: b.merged,
+        shattered: b.shattered, fragment: b.fragment,
+        hidden: b.unborn || b.discarded,
+      })),
+      log: r.hud.log.map((l) => ({ ...l, date: formatDate(m.startDate, l.t, { year: "numeric", month: "short" }) })),
+      escaped: r.hud.escaped,
+      launched: r.hud.launched,
+      // Snapshot of the selected body for the info card (render never reads the live sim).
+      selected: sel ? {
+        index: o.selected,
+        body: (({ name, color, x, y, vx, vy, mass, isSun, isStar, type, description }) =>
+          ({ name, color, x, y, vx, vy, mass, isSun, isStar, type, description }))(sel),
+        sun: { x: sun.x, y: sun.y, vx: sun.vx, vy: sun.vy },
+      } : null,
+    });
+  };
+
+  // The host reports back through these (kept current with the latest state setters).
+  useEffect(() => {
+    handlersRef.current = {
+      onLoaded(m) {
+        const name = pendingFollowRef.current;
+        pendingFollowRef.current = null;
+        const index = name ? m.bodies.findIndex((b) => b.name === name) : -1;
+        if (index >= 0) setFollow(index);
+        hudDirtyRef.current = true;
+        setSysVersion((v) => v + 1); // the URL can now record the new start date and seed
+      },
+      onResult(r) {
+        latestRef.current = r;
+        for (const msg of r.messages) {
+          if (msg.kind === "notice") notify(msg.text, msg.ms ?? 4000);
+          else if (msg.kind === "sunMass") { sunByEventRef.current = !!msg.byEvent; setSunMass(msg.value); }
+          else if (msg.kind === "rewindFloor") { setPaused(true); setReverse(false); }
+        }
+        if (r.hud) buildHud(r);
+      },
+    };
+  });
+
+  // Settings the simulation needs, sent whenever they change.
+  useEffect(() => {
+    hostRef.current?.configure({ speed, paused, reverse, sunMass, jupMass });
+  }, [speed, paused, reverse, sunMass, jupMass]);
+
+  // Belts follow their toggles.
+  useEffect(() => {
+    hostRef.current?.setBelts(belts);
+  }, [belts]);
+
+  // ─── Render loop ───────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
@@ -244,20 +330,10 @@ export default function SolarSystem() {
     const labelFont = rootStyle.getPropertyValue("--font-fira-sans").trim() || "sans-serif";
     const monoFont = rootStyle.getPropertyValue("--font-fira-mono").trim() || "monospace";
 
-    // What scenario events are allowed to change.
-    const ctl = {
-      get sys() { return sysRef.current; },
-      setSunMass: (v) => { optsRef.current.sunMass = v; sunByEventRef.current = true; setSunMass(v); },
-    };
-
     let raf;
     let last = performance.now();
-    let carry = 0;       // simulated years owed but not yet stepped
-    let rate = 0;        // smoothed actual sim speed, years per real second
-    let limitedScore = 0;
     let frame = 0;
     let inset = 0;       // animated: screen width covered by the control panel
-    const announced = new WeakSet(); // collision records already shown as a toast
 
     // Optional timing breakdown (?perf=1): exponential moving averages in ms.
     const perfOn = new URLSearchParams(window.location.search).has("perf");
@@ -273,52 +349,30 @@ export default function SolarSystem() {
       ema("interval", tLoop - tPrev);
       tPrev = tLoop;
       const o = optsRef.current;
-      const sys = sysRef.current;
+      const host = hostRef.current;
       const realDt = Math.min(0.1, (now - last) / 1000);
       last = now;
+
+      // Ask the host to advance. With the worker host this returns at once and
+      // the result arrives a moment later; drawing uses the latest snapshot.
+      if (host) {
+        displayFrame = Math.min(displayFrame * 1.002, Math.max(6, Math.min(17, perf.interval)));
+        const budget = host.physicsBudget(displayFrame, perf.draw + perf.hud + perf.predict + perf.gravity);
+        const wantHud = tLoop - lastHud > 140 || hudDirtyRef.current;
+        if (wantHud) { lastHud = tLoop; hudDirtyRef.current = false; }
+        const tPhys = performance.now();
+        host.frame(realDt, budget, wantHud);
+        if (host.kind === "main") ema("physics", performance.now() - tPhys);
+      }
+      const r = latestRef.current;
+      if (r) {
+        if (host?.kind === "worker") ema("physics", r.physicsMs);
+        ema("steps", r.steps);
+      }
+      const sys = host?.mirror;
       if (!sys) { raf = requestAnimationFrame(loop); return; }
       if (process.env.NODE_ENV !== "production") window.__sys = sys; // handy for debugging in the console
-
-      // Scenario mass ramp (a function of sim time, so it rewinds too).
-      const jupiterMult = sys.ramp ? rampValue(sys.ramp, sys.t) : o.jupMass;
-      if (setMassMultipliers(sys, o.sunMass, jupiterMult)) clearTrails(sys);
-
-      // Advance by real elapsed time, so speed doesn't depend on refresh rate.
-      if (!o.paused) {
-        carry += o.speed * realDt;
-        const want = Math.floor(carry / DT);
-        // Physics gets whatever's left of a frame after drawing, so slower
-        // devices run the simulation a little slower instead of dropping frames.
-        // The frame length comes from the display (8.3 ms at 120 Hz, 16.7 at 60).
-        displayFrame = Math.min(displayFrame * 1.002, Math.max(6, Math.min(17, perf.interval)));
-        const budget = Math.max(2, Math.min(PHYSICS_BUDGET_MS, displayFrame * 0.8 - perf.draw - perf.hud - perf.predict - perf.gravity));
-        const tPhys = performance.now();
-        const done = advance(sys, want, budget, o.reverse ? -1 : 1);
-        if (o.reverse && sys.stepCount <= sys.rewindFloor) {
-          // Rewind can only undo the most recent events; stop here.
-          optsRef.current.paused = true;
-          setPaused(true);
-          setReverse(false);
-          notify(`That's as far back as rewind goes: it remembers the last ${sys.maxHistory} launches and collisions.`, 6000);
-        }
-        ema("physics", performance.now() - tPhys);
-        ema("steps", done);
-        carry -= done * DT;
-        const limited = done < want;
-        if (limited) carry = 0; // don't build up a backlog we can never catch up on
-        limitedScore = limitedScore * 0.9 + (limited ? 0.1 : 0);
-        if (realDt > 0) rate = rate * 0.9 + ((done * DT) / realDt) * 0.1;
-      } else {
-        carry = 0;
-        rate = 0;
-        limitedScore = 0;
-      }
-
-      // Scenario events fire when sim time passes them, and undo when rewound past.
-      for (const e of sys.events) {
-        if (!e.done && sys.t >= e.t) { e.done = true; e.do(ctl); notify(e.label); }
-        else if (e.done && sys.t < e.t) { e.done = false; e.undo(ctl); notify(e.undoLabel); }
-      }
+      const jupiterMult = r?.ramping ? r.jupiterMult : o.jupMass;
 
       // Resize backing store to match the element and device pixel ratio.
       const rect = canvas.getBoundingClientRect();
@@ -374,74 +428,17 @@ export default function SolarSystem() {
         sizeMult: o.sizeMult, sunMult: o.sunMass, jupiterMult, zoom: cam.zoom,
         gravityLayer: gravity, labelFont, monoFont, launch: launchPreview,
       });
-
-      // Toast each new collision once, as it happens.
-      for (let k = 0; k < sys.historyIndex; k++) {
-        const rec = sys.history[k];
-        if ((rec.kind === "merge" || rec.kind === "impact") && !announced.has(rec)) {
-          announced.add(rec);
-          if (!o.reverse) notify(`${rec.text}.`, 3500);
-        }
-      }
-
       ema("draw", performance.now() - tDraw);
-      const tHud = performance.now();
-      // Panels update ~7 times a second; more often just costs React work.
-      if (tLoop - lastHud > 140 || hudDirtyRef.current) {
-        lastHud = tLoop;
-        hudDirtyRef.current = false;
-        if (sys.ramp && jupiterMult !== o.jupMass) setJupMass(jupiterMult);
-        const date = new Date(sys.startDate.getTime() + sys.t * 365.25 * 86400000);
-        const stats = {};
-        let debrisClouds = 0, debrisPieces = 0;
-        for (const [key, b] of Object.entries(sys.belts)) {
-          if (b.debris) {
-            debrisClouds++;
-            debrisPieces += beltStats(b, sun).alive;
-          } else {
-            stats[key] = beltStats(b, sun);
-          }
-        }
-        setHud({
-          date: isNaN(date) ? "" : date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }),
-          years: sys.t,
-          rate,
-          limited: limitedScore > 0.5,
-          belts: stats,
-          bodies: sys.bodies.map((b) => ({
-            name: b.name, color: b.color, isDwarf: b.isDwarf, isStar: b.isStar, isSun: b.isSun,
-            removed: b.removed, a: b.el?.[0], launched: b.launched, merged: b.merged,
-            shattered: b.shattered, fragment: b.fragment,
-            hidden: b.unborn || b.discarded,
-          })),
-          log: sys.history.slice(0, sys.historyIndex).slice(-12).reverse().map((r) => ({
-            text: r.text, kind: r.kind,
-            date: new Date(sys.startDate.getTime() + r.t * 365.25 * 86400000)
-              .toLocaleDateString(undefined, { year: "numeric", month: "short" }),
-          })),
-          escaped: sys.bodies.filter((b) => !b.isSun && !b.removed && Math.hypot(b.x - sun.x, b.y - sun.y) > ESCAPE_AU).map((b) => b.name),
-          launched: launchedCount(sys),
-          // Snapshot of the selected body for the info card (render never reads the live sim).
-          selected: o.selected !== null && sys.bodies[o.selected] ? {
-            index: o.selected,
-            body: (({ name, color, x, y, vx, vy, mass, isSun, isStar, type, description }) =>
-              ({ name, color, x, y, vx, vy, mass, isSun, isStar, type, description }))(sys.bodies[o.selected]),
-            sun: { x: sun.x, y: sun.y, vx: sun.vx, vy: sun.vy },
-          } : null,
-          debris: { clouds: debrisClouds, pieces: debrisPieces },
-        });
-      }
 
-      ema("hud", performance.now() - tHud);
       ema("loop", performance.now() - tLoop);
       if (perfOn && frame % 15 === 0 && perfRef.current) {
         const p = perf;
         const nParticles = sys.beltList.reduce((a, b) => a + b.n, 0);
         const nBodies = sys.bodies.filter((b) => !b.removed).length;
         perfRef.current.textContent =
-          `fps ${(1000 / p.interval).toFixed(0)}  frame ${p.interval.toFixed(1)}ms\n` +
+          `fps ${(1000 / p.interval).toFixed(0)}  frame ${p.interval.toFixed(1)}ms  physics on ${host?.kind === "worker" ? "worker" : "main thread"}\n` +
           `loop ${p.loop.toFixed(1)}  physics ${p.physics.toFixed(1)} (${p.steps.toFixed(0)} steps)\n` +
-          `draw ${p.draw.toFixed(1)}  predict ${p.predict.toFixed(1)}  grav ${p.gravity.toFixed(1)}  hud ${p.hud.toFixed(1)}\n` +
+          `draw ${p.draw.toFixed(1)}  predict ${p.predict.toFixed(1)}  grav ${p.gravity.toFixed(1)}\n` +
           `bodies ${nBodies}  particles ${nParticles}`;
       }
       frame++;
@@ -450,34 +447,17 @@ export default function SolarSystem() {
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [notify]);
-
-  // ─── Belts follow their toggles (and come back after a reload) ─
-  useEffect(() => {
-    const sys = sysRef.current;
-    if (!sys) return;
-    for (const [key, on] of Object.entries(belts)) {
-      if (on && !sys.belts[key]) addBelt(sys, key);
-      if (!on && sys.belts[key]) removeBelt(sys, key);
-    }
-  }, [belts, sysVersion]);
+  }, []);
 
   // ─── Pointer input: drag to pan, pinch/scroll to zoom, tap to select ──
   const doLaunch = useCallback((shot) => {
-    const sys = sysRef.current;
-    if (!sys) return;
-    if (launchedCount(sys) >= MAX_LAUNCHED) {
-      notify(`That's ${MAX_LAUNCHED} launched bodies — clear some first.`, 3500);
-      return;
-    }
-    launch(sys, launchTypeRef.current, shot.hx, shot.hy, shot.vx, shot.vy);
-  }, [notify]);
-
-  const clearAllLaunched = useCallback(() => {
-    if (sysRef.current) clearLaunched(sysRef.current);
-    setSelected(null);
+    hostRef.current?.launch(launchTypeRef.current, shot.hx, shot.hy, shot.vx, shot.vy);
   }, []);
 
+  const clearAllLaunched = useCallback(() => {
+    hostRef.current?.clearLaunched();
+    setSelected(null);
+  }, []);
   const toggleLaunchMode = useCallback(() => {
     setLaunchMode((on) => {
       if (!on) notify("Launch mode: press where you want a body, drag the way it should go, and let go. A tap makes a circular orbit. Right-drag pans.", 6000);
@@ -570,16 +550,16 @@ export default function SolarSystem() {
         const L = launchRef.current;
         launchRef.current = null;
         gesture = null;
-        if (L && e.type === "pointerup" && sysRef.current && viewRef.current) {
+        if (L && e.type === "pointerup" && hostRef.current?.mirror && viewRef.current) {
           L.to = p;
-          pointerActions.current.doLaunch(launchFromDrag(sysRef.current, viewRef.current, L.from, L.to));
+          pointerActions.current.doLaunch(launchFromDrag(hostRef.current.mirror, viewRef.current, L.from, L.to));
         }
         return;
       }
       const wasTap = e.type === "pointerup" && gesture?.type === "pan" && gesture.moved < CLICK_SLOP_PX;
       pointers.delete(e.pointerId);
-      if (wasTap && sysRef.current && viewRef.current) {
-        pointerActions.current.selectBody(hitTest(sysRef.current, viewRef.current, p.x, p.y, e.pointerType === "touch" ? 30 : 22));
+      if (wasTap && hostRef.current?.mirror && viewRef.current) {
+        pointerActions.current.selectBody(hitTest(hostRef.current.mirror, viewRef.current, p.x, p.y, e.pointerType === "touch" ? 30 : 22));
       }
       // Lifting one finger of a pinch continues as a pan (never as a tap).
       if (pointers.size === 1) startPan([...pointers.values()][0], Infinity);
