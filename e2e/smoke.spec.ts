@@ -4,15 +4,24 @@
 
 import { expect, test, type Page } from '@playwright/test'
 
-/** Fail the test on any console error or uncaught exception. */
+/**
+ * Fail the test on any console error, uncaught exception or failed request.
+ * Failed requests are recorded with their URL (the browser's own console
+ * message for a 404 doesn't say which file it was).
+ */
 function watchForErrors(page: Page) {
   const errors: string[] = []
-  page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()) })
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' && !msg.text().startsWith('Failed to load resource')) errors.push(msg.text())
+  })
   page.on('pageerror', (err) => errors.push(err.message))
+  page.on('response', (res) => { if (res.status() >= 400) errors.push(`${res.status()} ${new URL(res.url()).pathname}`) })
+  page.on('requestfailed', (req) => errors.push(`failed ${new URL(req.url()).pathname}: ${req.failure()?.errorText}`))
   return errors
 }
 
 const dockDate = (page: Page) => page.locator('[class*="dockDate"]')
+const notice = (page: Page) => page.getByRole('status')
 /** A body's button in the controls panel's Bodies list (labelled "Mars, 1.5 AU"). */
 const bodyButton = (page: Page, name: string) =>
   page.getByRole('complementary', { name: 'Simulation controls' }).getByRole('button', { name: new RegExp(`^${name}(,|$)`) })

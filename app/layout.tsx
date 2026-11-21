@@ -38,7 +38,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${firaSans.variable} ${firaMono.variable}`}>
       <body>
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {/* Vercel Analytics only exists on Vercel; elsewhere (CI, local builds) its script 404s. */}
+        {process.env.VERCEL === '1' && <Analytics />}
       </body>
     </html>
   )
