@@ -690,6 +690,7 @@ input:focus-visible {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 14px 16px 6px;
+  background: rgba(9, 13, 24, 0.96); /* opaque: it can sit over the planet card */
   opacity: 0;
   transform: translateX(-14px);
   pointer-events: none;

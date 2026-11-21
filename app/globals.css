@@ -1,8 +1,16 @@
-@import 'tailwindcss';
+/* Global base styles. The app's own styling lives in
+   components/solar-system/styles.module.css; this is just a small reset. */
 
-@theme inline {
-  --font-sans: var(--font-fira-sans);
-  --font-mono: var(--font-fira-mono);
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-fira-sans), system-ui, sans-serif;
 }
 
 html, body {
@@ -12,6 +20,33 @@ html, body {
   overscroll-behavior: none;
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
+h1, h2, h3, h4, p, ul, ol, dl, dd, blockquote, figure, pre {
+  margin: 0;
+}
+
+h1, h2, h3, h4 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+ul, ol {
+  list-style: none;
+  padding: 0;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+img, svg, video, canvas {
+  display: block;
+  vertical-align: middle;
 }

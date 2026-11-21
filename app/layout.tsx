@@ -44,7 +44,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${firaSans.variable} ${firaMono.variable}`}>
-      <body className="antialiased" style={{ margin: 0, background: '#070a12' }}>
+      <body>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
