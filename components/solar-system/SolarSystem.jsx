@@ -167,8 +167,8 @@ export default function SolarSystem() {
     const ctx = canvas.getContext("2d");
     const gravity = createGravityLayer();
     const rootStyle = getComputedStyle(document.documentElement);
-    const labelFont = rootStyle.getPropertyValue("--font-instrument").trim() || "sans-serif";
-    const monoFont = rootStyle.getPropertyValue("--font-plex-mono").trim() || "monospace";
+    const labelFont = rootStyle.getPropertyValue("--font-fira-sans").trim() || "sans-serif";
+    const monoFont = labelFont;
 
     // What scenario events are allowed to change.
     const ctl = {

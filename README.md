@@ -145,7 +145,7 @@ Changes go through a pull request rather than being pushed straight to `main`.
 - Orbital elements: [NASA JPL Solar System Dynamics](https://ssd.jpl.nasa.gov/planets/approx_pos.html) (Standish, *Keplerian Elements for Approximate Positions of the Major Planets*).
 - Planet facts: NASA; moon counts as of 2025.
 - Originally prototyped with [v0](https://v0.app), then rebuilt.
-- Type: [Fraunces](https://fonts.google.com/specimen/Fraunces), [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) and [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono).
+- Type: [Fira Sans](https://fonts.google.com/specimen/Fira+Sans).
 
 ## License
 

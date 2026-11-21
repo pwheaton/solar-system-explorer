@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from 'next'
-import { Fraunces, IBM_Plex_Mono, Instrument_Sans } from 'next/font/google'
+import { Fira_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const fraunces = Fraunces({ subsets: ['latin'], axes: ['SOFT', 'opsz'], style: ['normal', 'italic'], variable: '--font-fraunces' })
-const instrument = Instrument_Sans({ subsets: ['latin'], variable: '--font-instrument' })
-const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-plex-mono' })
+const firaSans = Fira_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  style: ['normal', 'italic'],
+  variable: '--font-fira-sans',
+})
 
 export const metadata: Metadata = {
   title: 'Solar System Explorer',
@@ -29,7 +32,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${instrument.variable} ${plexMono.variable}`}>
+    <html lang="en" className={firaSans.variable}>
       <body className="antialiased" style={{ margin: 0, background: '#070a12' }}>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
