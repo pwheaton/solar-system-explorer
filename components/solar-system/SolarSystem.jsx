@@ -1,17 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { centerOn, defaultCamera, makeView, zoomAt } from "@/lib/sim/camera.js";
+import { centerOn, defaultCamera, makeView, screenToWorld, zoomAt } from "@/lib/sim/camera.js";
 import { DT, PHYSICS_BUDGET_MS } from "@/lib/sim/constants.js";
 import {
-  addBelt, advance, beltStats, clearTrails, createSystem, removeBelt, setMassMultipliers,
+  addBelt, advance, beltStats, clearLaunched, clearTrails, createSystem, removeBelt, setMassMultipliers,
 } from "@/lib/sim/physics.js";
 import { createGravityLayer, drawFrame, hitTest, updateGravityLayer } from "@/lib/sim/render.js";
 import { randomSeed } from "@/lib/sim/rng.js";
+import {
+  DRAG_PX_PER_ORBIT_SPEED, LAUNCH_TYPES, MAX_LAUNCHED, circularSpeed, launch, launchedCount, predictPath,
+} from "@/lib/sim/sandbox.js";
 import { SCENARIOS, SCENARIO_DEFAULTS, getScenario, rampValue } from "@/lib/sim/scenarios.js";
 import { readUrlState, writeUrlState } from "@/lib/url-state.js";
 import ControlPanel from "./ControlPanel";
 import PlanetInfo from "./PlanetInfo";
+import LaunchBar from "./LaunchBar";
 import TimeDock from "./TimeDock";
 import { Icon, styles as s } from "./ui";
 
@@ -19,7 +23,25 @@ const NARROW_PX = 768;
 const CLICK_SLOP_PX = 5;
 const FOLLOW_ZOOM = 3;
 const PANEL_INSET_PX = 320; // control panel width plus its margin
-const EMPTY_HUD = { date: "", years: 0, rate: 0, limited: false, belts: {}, bodies: [] };
+const EMPTY_HUD = { date: "", years: 0, rate: 0, limited: false, belts: {}, bodies: [], log: [], escaped: [], launched: 0 };
+const ESCAPE_AU = 100;
+
+/** Turn a press-and-drag on screen into a launch: position and velocity relative to the Sun. */
+function launchFromDrag(sys, view, from, to) {
+  const [hx, hy] = screenToWorld(view, from.x, from.y);
+  const r = Math.max(1e-6, Math.hypot(hx, hy));
+  const vc = circularSpeed(sys, r);
+  const len = Math.hypot(to.x - from.x, to.y - from.y);
+  if (len < 4) {
+    // A tap: circular orbit, going the same way round as the planets.
+    return { hx, hy, vx: (-hy / r) * vc, vy: (hx / r) * vc, factor: 1, tap: true };
+  }
+  // Direction in world space (the distance warp bends screen directions slightly).
+  const [hx2, hy2] = screenToWorld(view, from.x + (to.x - from.x) / len, from.y + (to.y - from.y) / len);
+  const d = Math.hypot(hx2 - hx, hy2 - hy) || 1;
+  const factor = Math.min(5, len / DRAG_PX_PER_ORBIT_SPEED);
+  return { hx, hy, vx: ((hx2 - hx) / d) * vc * factor, vy: ((hy2 - hy) / d) * vc * factor, factor, tap: false };
+}
 
 export default function SolarSystem() {
   const [scenarioId, setScenarioId] = useState("today");
@@ -40,6 +62,8 @@ export default function SolarSystem() {
   const [hud, setHud] = useState(EMPTY_HUD);
   const [sysVersion, setSysVersion] = useState(0);
   const [notice, setNotice] = useState(null);
+  const [launchMode, setLaunchMode] = useState(false);
+  const [launchType, setLaunchType] = useState("planet");
 
   const canvasRef = useRef(null);
   const sysRef = useRef(null);
@@ -49,6 +73,12 @@ export default function SolarSystem() {
   // True while the Sun's mass was last set by a scenario event rather than by hand.
   // Event-driven values stay out of shared links (the event replays on its own).
   const sunByEventRef = useRef(false);
+  // Launch drag in progress: { from, to, dirty, preview } in screen pixels.
+  const launchRef = useRef(null);
+  const launchModeRef = useRef(false);
+  launchModeRef.current = launchMode;
+  const launchTypeRef = useRef(launchType);
+  launchTypeRef.current = launchType;
 
   useEffect(() => {
     optsRef.current = { speed, sunMass, jupMass, distExp, sizeMult, showGrav, showTrails, paused, reverse, selected, panelOpen };
@@ -192,6 +222,7 @@ export default function SolarSystem() {
     let limitedScore = 0;
     let frame = 0;
     let inset = 0;       // animated: screen width covered by the control panel
+    const announced = new WeakSet(); // collision records already shown as a toast
 
     function loop(now) {
       const o = optsRef.current;
@@ -199,6 +230,7 @@ export default function SolarSystem() {
       const realDt = Math.min(0.1, (now - last) / 1000);
       last = now;
       if (!sys) { raf = requestAnimationFrame(loop); return; }
+      if (process.env.NODE_ENV !== "production") window.__sys = sys; // handy for debugging in the console
 
       // Scenario mass ramp (a function of sim time, so it rewinds too).
       const jupiterMult = sys.ramp ? rampValue(sys.ramp, sys.t) : o.jupMass;
@@ -251,11 +283,38 @@ export default function SolarSystem() {
       viewRef.current = view;
       if (o.showGrav && frame % 3 === 0) updateGravityLayer(gravity, sys.bodies, view);
 
+      // Launch preview: recompute the predicted path at most once per frame.
+      const L = launchRef.current;
+      let launchPreview = null;
+      if (L) {
+        if (L.dirty) {
+          const shot = launchFromDrag(sys, view, L.from, L.to);
+          const path = predictPath(sys, launchTypeRef.current, shot.hx, shot.hy, shot.vx, shot.vy);
+          L.preview = { shot, path };
+          L.dirty = false;
+        }
+        const def = LAUNCH_TYPES[launchTypeRef.current];
+        launchPreview = L.preview && {
+          from: [L.from.x, L.from.y], to: [L.to.x, L.to.y],
+          points: L.preview.path.points, hit: L.preview.path.hit,
+          factor: L.preview.shot.factor, color: def.colors[0], radius: Math.max(2.5, def.displayRadius * 0.8),
+        };
+      }
+
       drawFrame(ctx, sys, view, {
         showGrav: o.showGrav, showTrails: o.showTrails, selected: o.selected,
         sizeMult: o.sizeMult, sunMult: o.sunMass, jupiterMult,
-        gravityLayer: gravity, labelFont, monoFont,
+        gravityLayer: gravity, labelFont, monoFont, launch: launchPreview,
       });
+
+      // Toast each new collision once, as it happens.
+      for (let k = 0; k < sys.historyIndex; k++) {
+        const rec = sys.history[k];
+        if (rec.kind === "merge" && !announced.has(rec)) {
+          announced.add(rec);
+          if (!o.reverse) notify(`${rec.text}.`, 3500);
+        }
+      }
 
       if (frame % 6 === 0) {
         if (sys.ramp && jupiterMult !== o.jupMass) setJupMass(jupiterMult);
@@ -270,8 +329,16 @@ export default function SolarSystem() {
           belts: stats,
           bodies: sys.bodies.map((b) => ({
             name: b.name, color: b.color, isDwarf: b.isDwarf, isStar: b.isStar, isSun: b.isSun,
-            removed: b.removed, a: b.el?.[0],
+            removed: b.removed, a: b.el?.[0], launched: b.launched, merged: b.merged,
+            hidden: b.unborn || b.discarded,
           })),
+          log: sys.history.slice(0, sys.historyIndex).slice(-12).reverse().map((r) => ({
+            text: r.text, kind: r.kind,
+            date: new Date(sys.startDate.getTime() + r.t * 365.25 * 86400000)
+              .toLocaleDateString(undefined, { year: "numeric", month: "short" }),
+          })),
+          escaped: sys.bodies.filter((b) => !b.isSun && !b.removed && Math.hypot(b.x - sun.x, b.y - sun.y) > ESCAPE_AU).map((b) => b.name),
+          launched: launchedCount(sys),
         });
       }
 
@@ -294,8 +361,35 @@ export default function SolarSystem() {
   }, [belts, sysVersion]);
 
   // ─── Pointer input: drag to pan, pinch/scroll to zoom, tap to select ──
+  const doLaunch = useCallback((shot) => {
+    const sys = sysRef.current;
+    if (!sys) return;
+    if (launchedCount(sys) >= MAX_LAUNCHED) {
+      notify(`That's ${MAX_LAUNCHED} launched bodies — clear some first.`, 3500);
+      return;
+    }
+    launch(sys, launchTypeRef.current, shot.hx, shot.hy, shot.vx, shot.vy);
+  }, [notify]);
+
+  const clearAllLaunched = useCallback(() => {
+    if (sysRef.current) clearLaunched(sysRef.current);
+    setSelected(null);
+  }, []);
+
+  const toggleLaunchMode = useCallback(() => {
+    setLaunchMode((on) => {
+      if (!on) notify("Launch mode: press where you want a body, drag the way it should go, and let go. A tap makes a circular orbit. Right-drag pans.", 6000);
+      return !on;
+    });
+  }, [notify]);
+
+  useEffect(() => {
+    if (canvasRef.current) canvasRef.current.style.cursor = launchMode ? "crosshair" : "grab";
+    if (!launchMode) launchRef.current = null;
+  }, [launchMode]);
+
   const pointerActions = useRef(null);
-  pointerActions.current = { selectBody, setFollow };
+  pointerActions.current = { selectBody, setFollow, doLaunch };
   useEffect(() => {
     const canvas = canvasRef.current;
     const pointers = new Map();
@@ -314,12 +408,23 @@ export default function SolarSystem() {
       return { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
     };
 
+    const idleCursor = () => (launchModeRef.current ? "crosshair" : "grab");
+    const cancelLaunch = () => { launchRef.current = null; };
+
     const onDown = (e) => {
-      if (e.button !== 0 && e.pointerType === "mouse") return;
-      canvas.setPointerCapture(e.pointerId);
+      const rightDrag = e.pointerType === "mouse" && e.button === 2;
+      if (e.pointerType === "mouse" && e.button !== 0 && !rightDrag) return;
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer not tracked by the browser */ }
       pointers.set(e.pointerId, local(e));
+      if (pointers.size === 1 && launchModeRef.current && !rightDrag) {
+        // Launch mode: press where the body starts, drag the way it should go.
+        const p = local(e);
+        gesture = { type: "launch" };
+        launchRef.current = { from: p, to: p, dirty: true, preview: null };
+        return;
+      }
       if (pointers.size === 1) startPan(local(e));
-      else if (pointers.size === 2) gesture = { type: "pinch", ...pinchState() };
+      else if (pointers.size === 2) { cancelLaunch(); gesture = { type: "pinch", ...pinchState() }; }
       canvas.style.cursor = "grabbing";
     };
 
@@ -328,6 +433,10 @@ export default function SolarSystem() {
       const p = local(e);
       pointers.set(e.pointerId, p);
       const cam = cameraRef.current;
+      if (gesture.type === "launch") {
+        if (launchRef.current) { launchRef.current.to = p; launchRef.current.dirty = true; }
+        return;
+      }
       if (gesture.type === "pan") {
         const dx = p.x - gesture.start.x;
         const dy = p.y - gesture.start.y;
@@ -354,6 +463,17 @@ export default function SolarSystem() {
     const onUp = (e) => {
       if (!pointers.has(e.pointerId)) return;
       const p = local(e);
+      if (gesture?.type === "launch") {
+        pointers.delete(e.pointerId);
+        const L = launchRef.current;
+        launchRef.current = null;
+        gesture = null;
+        if (L && e.type === "pointerup" && sysRef.current && viewRef.current) {
+          L.to = p;
+          pointerActions.current.doLaunch(launchFromDrag(sysRef.current, viewRef.current, L.from, L.to));
+        }
+        return;
+      }
       const wasTap = e.type === "pointerup" && gesture?.type === "pan" && gesture.moved < CLICK_SLOP_PX;
       pointers.delete(e.pointerId);
       if (wasTap && sysRef.current && viewRef.current) {
@@ -361,8 +481,9 @@ export default function SolarSystem() {
       }
       // Lifting one finger of a pinch continues as a pan (never as a tap).
       if (pointers.size === 1) startPan([...pointers.values()][0], Infinity);
-      else if (pointers.size === 0) { gesture = null; canvas.style.cursor = "grab"; }
+      else if (pointers.size === 0) { gesture = null; canvas.style.cursor = idleCursor(); }
     };
+    const onContextMenu = (e) => { if (launchModeRef.current) e.preventDefault(); };
 
     const onWheel = (e) => {
       e.preventDefault();
@@ -377,7 +498,9 @@ export default function SolarSystem() {
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("pointercancel", onUp);
     canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("contextmenu", onContextMenu);
     return () => {
+      canvas.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerup", onUp);
@@ -388,7 +511,7 @@ export default function SolarSystem() {
 
   // ─── Keyboard shortcuts ────────────────────────────────────────
   const keyActions = useRef(null);
-  keyActions.current = { reset, recenter, setBelt, belts, loadScenario, selected, follow, setFollow };
+  keyActions.current = { reset, recenter, setBelt, belts, loadScenario, selected, follow, setFollow, toggleLaunchMode, launchMode };
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -410,7 +533,10 @@ export default function SolarSystem() {
           if (k.follow !== null) k.setFollow(null);
           else if (k.selected !== null) k.setFollow(k.selected);
           break;
-        case "Escape": setSelected(null); break;
+        case "KeyL": k.toggleLaunchMode(); break;
+        case "Escape":
+          if (k.launchMode) setLaunchMode(false); else setSelected(null);
+          break;
         default: break;
       }
     };
@@ -444,7 +570,20 @@ export default function SolarSystem() {
         </div>
       )}
 
+      {launchMode && (
+        <LaunchBar
+          type={launchType}
+          onType={setLaunchType}
+          count={hud.launched}
+          max={MAX_LAUNCHED}
+          onClear={clearAllLaunched}
+          onClose={() => setLaunchMode(false)}
+        />
+      )}
+
       <TimeDock
+        launchMode={launchMode}
+        onToggleLaunch={toggleLaunchMode}
         paused={paused}
         reverse={reverse}
         speed={speed}

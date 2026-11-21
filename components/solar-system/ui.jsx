@@ -66,6 +66,7 @@ export const Icon = {
   link: () => <svg {...svgProps}><path d="M6.5 9.5l3-3" /><path d="M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1" /><path d="M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" /></svg>,
   target: () => <svg {...svgProps}><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1" fill="currentColor" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2" /></svg>,
   close: () => <svg {...svgProps} width={12} height={12}><path d="M4 4l8 8M12 4l-8 8" /></svg>,
+  launch: () => <svg {...svgProps}><circle cx="4" cy="12" r="2" fill="currentColor" stroke="none" /><path d="M5.5 10.5 13 3" /><path d="M8.5 3H13v4.5" /></svg>,
   sliders: () => <svg {...svgProps}><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7" /><circle cx="10.5" cy="4.5" r="1.5" /><circle cx="5.5" cy="11.5" r="1.5" /></svg>,
 };
 

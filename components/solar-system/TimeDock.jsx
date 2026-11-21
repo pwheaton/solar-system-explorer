@@ -9,7 +9,7 @@ export function formatRate(yrPerSec) {
 }
 
 /** Bottom dock: play/pause, rewind, speed, and the simulation clock. */
-export default function TimeDock({ paused, reverse, speed, hud, onTogglePause, onToggleReverse, onSpeed, onReset }) {
+export default function TimeDock({ paused, reverse, speed, hud, onTogglePause, onToggleReverse, onSpeed, onReset, launchMode, onToggleLaunch }) {
   const state = paused ? "paused" : reverse ? "reverse" : "running";
   const label = paused ? "Paused" : reverse ? "Rewinding" : "Running";
   return (
@@ -43,6 +43,19 @@ export default function TimeDock({ paused, reverse, speed, hud, onTogglePause, o
       <div className={s.dockDivider} />
 
       <Slider className={s.dockSpeed} label="Speed" value={speed} min={0.005} max={20} log onChange={onSpeed} format={formatRate} />
+
+      <div className={s.dockDivider} />
+
+      <button
+        type="button"
+        className={s.launchBtn}
+        aria-pressed={launchMode}
+        onClick={onToggleLaunch}
+        title="Throw your own planets, asteroids and stars in (L)"
+        aria-label="Launch mode"
+      >
+        <Icon.launch /> <span className={s.launchLabel}>Launch</span>
+      </button>
 
       <div className={s.dockDivider} />
 

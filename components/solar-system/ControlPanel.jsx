@@ -12,6 +12,7 @@ const KEYS = [
   ["C", "Recenter view"],
   ["G · T", "Gravity · trails"],
   ["A · K", "Asteroids · Kuiper"],
+  ["L", "Launch mode"],
   ["R", "Restart"],
 ];
 
@@ -100,17 +101,40 @@ export default function ControlPanel({
 
       <Section index="05" title="Bodies">
         <ul className={s.bodies}>
-          {hud.bodies.map((d, i) => !d.isSun && (
+          {hud.bodies.map((d, i) => !d.isSun && !d.hidden && (
             <li key={d.name}>
               <button type="button" className={s.body} onClick={() => onSelect(i)} aria-pressed={selected === i} data-gone={d.removed || undefined}>
                 <span className={s.bodyDot} style={{ background: d.color, boxShadow: d.isStar ? `0 0 8px ${d.color}` : undefined }} />
                 {d.name}
                 {follow === i && <span className={s.eyebrow} style={{ color: "var(--amber)" }}>following</span>}
-                <span className={s.bodyMeta}>{d.a ? `${d.a.toFixed(1)} AU` : d.isStar ? "star" : ""}</span>
+                <span className={s.bodyMeta}>
+                  {d.merged ? "merged" : d.a ? `${d.a.toFixed(1)} AU` : d.launched ? "yours" : d.isStar ? "star" : ""}
+                </span>
               </button>
             </li>
           ))}
         </ul>
+      </Section>
+
+      <Section index="06" title="Event log">
+        {hud.log.length === 0 && hud.escaped.length === 0 ? (
+          <p className={s.logEmpty}>Nothing dramatic yet. Try launching something (press <kbd>L</kbd>) or a chaos scenario.</p>
+        ) : (
+          <ul className={s.log}>
+            {hud.escaped.length > 0 && (
+              <li className={s.logItem} data-kind="escape">
+                <span className={s.logDate}>now</span>
+                <span>Left the solar system: {hud.escaped.join(", ")}</span>
+              </li>
+            )}
+            {hud.log.map((e, i) => (
+              <li key={i} className={s.logItem} data-kind={e.kind}>
+                <span className={s.logDate}>{e.date}</span>
+                <span>{e.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
 
       <footer className={s.footer}>
