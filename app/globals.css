@@ -1,14 +1,14 @@
 @import 'tailwindcss';
 
 @theme inline {
-  --font-sans: var(--font-dm-sans);
-  --font-mono: var(--font-code);
+  --font-sans: var(--font-fira-sans);
+  --font-mono: var(--font-fira-mono);
 }
 
 html, body {
   margin: 0;
-  background: #06060d;
-  color: #d0d0e0;
+  background: #070a12;
+  color: #ebe6d8;
   overscroll-behavior: none;
 }
 
