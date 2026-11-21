@@ -1,100 +1,131 @@
-// Small shared UI pieces for the simulator panels.
+// Shared UI pieces for the simulator panels.
 
-export const FONT = {
-  sans: "var(--font-dm-sans), sans-serif",
-  mono: "var(--font-code), monospace",
-  display: "var(--font-display), sans-serif",
-};
+import s from "./styles.module.css";
 
-export const panelStyle = {
-  background: "rgba(10,10,18,0.88)",
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
-  boxSizing: "border-box",
-  overflowY: "auto",
-  zIndex: 15,
-};
+export { s as styles };
 
-export function Slider({ label, value, min, max, step, onChange, format, log }) {
-  const display = format ? format(value) : value.toFixed(1);
+export function Slider({ label, value, min, max, step, onChange, format, log, hot, className }) {
   const toSlider = (v) => (log ? Math.log10(v) : v);
+  const lo = toSlider(min);
+  const hi = toSlider(max);
+  const pos = toSlider(value);
+  const fill = `${Math.max(0, Math.min(100, ((pos - lo) / (hi - lo)) * 100))}%`;
   return (
-    <label style={{ display: "block", marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 11, letterSpacing: "0.04em" }}>
-        <span style={{ color: "#8a8a9a", fontFamily: FONT.sans, fontWeight: 500 }}>{label}</span>
-        <span style={{ color: "#d0c8a8", fontFamily: FONT.mono, fontWeight: 500 }}>{display}</span>
+    <label className={`${s.slider} ${className || ""}`} data-hot={hot || undefined}>
+      <div className={s.sliderHead}>
+        <span className={s.sliderLabel}>{label}</span>
+        <span className={s.sliderValue}>{format ? format(value) : value.toFixed(1)}</span>
       </div>
       <input
         type="range"
-        min={toSlider(min)}
-        max={toSlider(max)}
+        min={lo}
+        max={hi}
         step={log ? 0.01 : step || 0.01}
-        value={toSlider(value)}
+        value={pos}
+        style={{ "--fill": fill }}
         onChange={(e) => {
           const v = parseFloat(e.target.value);
           onChange(log ? Math.pow(10, v) : v);
         }}
-        style={{ width: "100%" }}
       />
     </label>
   );
 }
 
-export function SectionLabel({ children }) {
+export function Section({ index, title, children }) {
   return (
-    <div style={{
-      fontSize: 10, color: "#5a5a6a", fontFamily: FONT.display, fontWeight: 600,
-      textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10, marginTop: 8,
-    }}>
+    <section className={s.section}>
+      <div className={s.sectionHead}>
+        <span className={s.sectionIndex}>{index}</span>
+        <h2 className={s.sectionTitle} style={{ margin: 0 }}>{title}</h2>
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
-export function SmallBtn({ children, onClick, active, title }) {
+export function Chip({ active, onClick, children, title }) {
   return (
-    <button onClick={onClick} title={title} aria-pressed={active} style={{
-      background: active ? "rgba(200,168,78,0.15)" : "rgba(40,40,55,0.5)",
-      border: active ? "1px solid rgba(200,168,78,0.3)" : "1px solid rgba(60,60,80,0.4)",
-      color: active ? "#C8A84E" : "#7a7a8a", borderRadius: 6, padding: "5px 10px",
-      fontSize: 11, cursor: "pointer", fontFamily: FONT.sans, fontWeight: 500,
-      transition: "all 0.15s",
-    }}>
+    <button type="button" className={s.chip} aria-pressed={!!active} onClick={onClick} title={title}>
+      <span className={s.chipLed} aria-hidden />
       {children}
     </button>
   );
 }
 
-export function InfoRow({ label, value }) {
-  if (!value) return null;
-  return (
-    <div style={{ marginBottom: 7 }}>
-      <div style={{ fontSize: 9, color: "#5a5a6a", fontFamily: FONT.sans, fontWeight: 600, marginBottom: 1, letterSpacing: "0.03em" }}>{label}</div>
-      <div style={{ fontSize: 11, color: "#a0a0b8", fontFamily: FONT.sans, lineHeight: 1.4 }}>{value}</div>
-    </div>
-  );
-}
+// ─── Icons (16px, stroke = currentColor) ─────────────────────────
 
-export function GlobalStyles() {
-  return (
-    <style>{`
-      input[type="range"] {
-        -webkit-appearance: none; appearance: none;
-        height: 4px; background: rgba(60,60,80,0.5); border-radius: 2px; outline: none;
-      }
-      input[type="range"]::-webkit-slider-thumb {
-        -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
-        background: #C8A84E; cursor: pointer; border: 2px solid #1a1a2a;
-        box-shadow: 0 0 6px rgba(200,168,78,0.3);
-      }
-      input[type="range"]::-moz-range-thumb {
-        width: 14px; height: 14px; border-radius: 50%;
-        background: #C8A84E; cursor: pointer; border: 2px solid #1a1a2a;
-      }
-      input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid #C8A84E; outline-offset: 2px; }
-      ::-webkit-scrollbar { width: 4px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(80,80,100,0.3); border-radius: 2px; }
-    `}</style>
-  );
+const svgProps = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+
+export const Icon = {
+  play: () => <svg {...svgProps} width={18} height={18}><path d="M5 3.2v9.6L13 8z" fill="currentColor" stroke="none" /></svg>,
+  pause: () => <svg {...svgProps} width={18} height={18}><path d="M5 3.5v9M11 3.5v9" strokeWidth={2.4} /></svg>,
+  rewind: () => <svg {...svgProps}><path d="M8 4 3 8l5 4V4zM14 4 9 8l5 4V4z" fill="currentColor" stroke="none" /></svg>,
+  forward: () => <svg {...svgProps}><path d="M8 4l5 4-5 4V4zM2 4l5 4-5 4V4z" fill="currentColor" stroke="none" /></svg>,
+  reset: () => <svg {...svgProps}><path d="M3 8a5 5 0 1 0 1.6-3.7" /><path d="M3 2.5v2.8h2.8" /></svg>,
+  link: () => <svg {...svgProps}><path d="M6.5 9.5l3-3" /><path d="M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1" /><path d="M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1" /></svg>,
+  target: () => <svg {...svgProps}><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1" fill="currentColor" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2" /></svg>,
+  close: () => <svg {...svgProps} width={12} height={12}><path d="M4 4l8 8M12 4l-8 8" /></svg>,
+  sliders: () => <svg {...svgProps}><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7" /><circle cx="10.5" cy="4.5" r="1.5" /><circle cx="5.5" cy="11.5" r="1.5" /></svg>,
+};
+
+// ─── Scenario glyphs: tiny orbit diagrams (22px) ─────────────────
+
+const g = { width: 22, height: 22, viewBox: "0 0 22 22", fill: "none", stroke: "currentColor", strokeWidth: 1.2, "aria-hidden": true };
+
+export function ScenarioGlyph({ id }) {
+  switch (id) {
+    case "flyby":
+      return (
+        <svg {...g}>
+          <circle cx="9" cy="12" r="2" fill="currentColor" stroke="none" />
+          <circle cx="9" cy="12" r="6" opacity="0.45" />
+          <path d="M1 4c7 1 14 4 20 13" strokeDasharray="2 2" />
+          <circle cx="17.5" cy="11.5" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "binary":
+      return (
+        <svg {...g}>
+          <ellipse cx="11" cy="11" rx="8.5" ry="5" opacity="0.45" />
+          <circle cx="7" cy="11" r="2.2" fill="currentColor" stroke="none" />
+          <circle cx="16" cy="11" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "ignite":
+      return (
+        <svg {...g}>
+          <circle cx="11" cy="11" r="3.2" fill="currentColor" stroke="none" />
+          <path d="M11 2.5v2.5M11 17v2.5M2.5 11H5M17 11h2.5M5 5l1.8 1.8M15.2 15.2 17 17M17 5l-1.8 1.8M6.8 15.2 5 17" />
+        </svg>
+      );
+    case "halfsun":
+      return (
+        <svg {...g}>
+          <circle cx="11" cy="11" r="5" />
+          <path d="M11 6a5 5 0 0 1 0 10z" fill="currentColor" stroke="none" />
+          <circle cx="11" cy="11" r="9" strokeDasharray="1.5 2.5" opacity="0.5" />
+        </svg>
+      );
+    case "nosun":
+      return (
+        <svg {...g}>
+          <circle cx="11" cy="11" r="3.5" strokeDasharray="1.6 1.6" />
+          <path d="M14.5 5.5l4-3M15 15l4 3M5.5 16l-3.5 3" opacity="0.7" />
+          <circle cx="18.5" cy="2.5" r="1.2" fill="currentColor" stroke="none" />
+          <circle cx="19" cy="18" r="1.2" fill="currentColor" stroke="none" />
+          <circle cx="2" cy="19" r="1.2" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    default: // today
+      return (
+        <svg {...g}>
+          <circle cx="11" cy="11" r="2.4" fill="currentColor" stroke="none" />
+          <circle cx="11" cy="11" r="5.5" opacity="0.5" />
+          <circle cx="11" cy="11" r="9" opacity="0.35" />
+          <circle cx="16.5" cy="11" r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="4.6" cy="4.6" r="1.1" fill="currentColor" stroke="none" />
+        </svg>
+      );
+  }
 }

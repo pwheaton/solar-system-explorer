@@ -10,13 +10,15 @@ import { createGravityLayer, drawFrame, hitTest, updateGravityLayer } from "@/li
 import { randomSeed } from "@/lib/sim/rng.js";
 import { SCENARIOS, SCENARIO_DEFAULTS, getScenario, rampValue } from "@/lib/sim/scenarios.js";
 import { readUrlState, writeUrlState } from "@/lib/url-state.js";
-import ControlPanel, { PANEL_WIDTH, formatRate } from "./ControlPanel";
+import ControlPanel from "./ControlPanel";
 import PlanetInfo from "./PlanetInfo";
-import { FONT, GlobalStyles } from "./ui";
+import TimeDock from "./TimeDock";
+import { Icon, styles as s } from "./ui";
 
 const NARROW_PX = 768;
 const CLICK_SLOP_PX = 5;
 const FOLLOW_ZOOM = 3;
+const PANEL_INSET_PX = 320; // control panel width plus its margin
 const EMPTY_HUD = { date: "", years: 0, rate: 0, limited: false, belts: {}, bodies: [] };
 
 export default function SolarSystem() {
@@ -46,11 +48,11 @@ export default function SolarSystem() {
   const optsRef = useRef({});
 
   useEffect(() => {
-    optsRef.current = { speed, sunMass, jupMass, distExp, sizeMult, showGrav, showTrails, paused, reverse, selected };
+    optsRef.current = { speed, sunMass, jupMass, distExp, sizeMult, showGrav, showTrails, paused, reverse, selected, panelOpen };
   });
 
   // ─── Notices (scenario intros, events) ─────────────────────────
-  const notify = useCallback((text, ms = 4000) => setNotice({ text, id: Math.random(), ms }), []);
+  const notify = useCallback((text, ms = 4000, title) => setNotice({ text, title, id: Math.random(), ms }), []);
   useEffect(() => {
     if (!notice) return;
     const id = setTimeout(() => setNotice(null), notice.ms);
@@ -106,7 +108,7 @@ export default function SolarSystem() {
     setFollowState(null);
     if (followIndex >= 0) setFollow(followIndex);
 
-    if (!opts.quiet) notify(`${sc.icon} ${sc.name}: ${sc.blurb}`, 9000);
+    if (!opts.quiet) notify(sc.blurb, 9000, sc.name);
   }, [notify, setFollow]);
 
   const reset = useCallback(() => loadScenario(scenarioId, { quiet: true }), [loadScenario, scenarioId]);
@@ -164,7 +166,9 @@ export default function SolarSystem() {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     const gravity = createGravityLayer();
-    const labelFont = getComputedStyle(document.documentElement).getPropertyValue("--font-dm-sans").trim() || "sans-serif";
+    const rootStyle = getComputedStyle(document.documentElement);
+    const labelFont = rootStyle.getPropertyValue("--font-instrument").trim() || "sans-serif";
+    const monoFont = rootStyle.getPropertyValue("--font-plex-mono").trim() || "monospace";
 
     // What scenario events are allowed to change.
     const ctl = {
@@ -178,6 +182,7 @@ export default function SolarSystem() {
     let rate = 0;        // smoothed actual sim speed, years per real second
     let limitedScore = 0;
     let frame = 0;
+    let inset = 0;       // animated: screen width covered by the control panel
 
     function loop(now) {
       const o = optsRef.current;
@@ -223,19 +228,24 @@ export default function SolarSystem() {
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+      // On wide screens the open panel covers the right edge; centre the view in what's left.
+      const targetInset = o.panelOpen && w >= NARROW_PX ? PANEL_INSET_PX : 0;
+      inset += (targetInset - inset) * Math.min(1, realDt * 8);
+      if (Math.abs(targetInset - inset) < 0.5) inset = targetInset;
+
       const cam = cameraRef.current;
       const sun = sys.bodies[0];
       const target = cam.follow !== null ? sys.bodies[cam.follow] : null;
-      if (target && !target.removed) centerOn(cam, w, h, o.distExp, target.x - sun.x, target.y - sun.y);
+      if (target && !target.removed) centerOn(cam, w, h, o.distExp, target.x - sun.x, target.y - sun.y, inset);
 
-      const view = makeView(w, h, cam, o.distExp);
+      const view = makeView(w, h, cam, o.distExp, inset);
       viewRef.current = view;
       if (o.showGrav && frame % 3 === 0) updateGravityLayer(gravity, sys.bodies, view);
 
       drawFrame(ctx, sys, view, {
         showGrav: o.showGrav, showTrails: o.showTrails, selected: o.selected,
         sizeMult: o.sizeMult, sunMult: o.sunMass, jupiterMult,
-        gravityLayer: gravity, labelFont,
+        gravityLayer: gravity, labelFont, monoFont,
       });
 
       if (frame % 6 === 0) {
@@ -401,86 +411,63 @@ export default function SolarSystem() {
 
   const sys = sysRef.current;
   const selBody = sys && selected !== null ? sys.bodies[selected] : null;
-  const panelW = `min(${PANEL_WIDTH}px, 85vw)`;
   const scenario = getScenario(scenarioId);
 
   return (
-    <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", position: "relative", background: "#06060d", fontFamily: FONT.sans }}>
+    <div className={s.root} data-panel={panelOpen ? "open" : "closed"}>
       <canvas
         ref={canvasRef}
+        className={s.canvas}
         aria-label="Solar system simulation. Drag to pan, scroll or pinch to zoom, click a planet for details."
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block", cursor: "grab", touchAction: "none" }}
       />
 
-      {/* Title + notices */}
-      <div style={{
-        position: "absolute", top: 16, zIndex: 10, pointerEvents: "none", textAlign: "center",
-        // Centre in the space left of the control panel, clear of the toggle button.
-        left: 0, right: panelOpen ? `calc(${panelW} + 90px)` : 0, paddingLeft: panelOpen ? 90 : 110, paddingRight: panelOpen ? 0 : 110,
-        transition: "right 0.3s ease",
-      }}>
-        <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: "clamp(11px, 3.2vw, 16px)", color: "#888898", letterSpacing: "0.15em", textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          N-Body Solar System
-        </div>
-        <div className="hint" style={{ fontSize: 10, color: "#4a4a5a", marginTop: 2, fontFamily: FONT.mono }}>
-          SPACE pause · B rewind · F follow · 1–6 scenarios · drag, scroll, click a planet
+      <div className={s.brand}>
+        <div className={s.brandName}>Solar System <em>Explorer</em></div>
+        <div className={`${s.eyebrow} ${s.brandSub}`}>
+          N-body gravity simulator{scenarioId !== "today" && <> · <span style={{ color: "var(--amber)" }}>{scenario.name}</span></>}
+          {follow !== null && hud.bodies[follow] && <> · following {hud.bodies[follow].name}</>}
         </div>
       </div>
+
       {notice && (
-        <div key={notice.id} role="status" style={{
-          position: "absolute", top: 58, left: "50%", transform: "translateX(-50%)", zIndex: 12,
-          width: "max-content", maxWidth: "min(520px, calc(100vw - 32px))", pointerEvents: "none",
-          background: "rgba(14,14,26,0.9)", border: "1px solid rgba(200,168,78,0.25)", borderRadius: 8,
-          padding: "8px 12px", fontSize: 12, lineHeight: 1.45, color: "#c8c0a0", textAlign: "center",
-          backdropFilter: "blur(10px)", animation: "notice-in 0.25s ease",
-        }}>
-          {notice.text}
+        <div key={notice.id} role="status" className={`${s.frame} ${s.notice}`}>
+          {notice.title && <strong>{notice.title}. </strong>}{notice.text}
         </div>
       )}
 
-      {/* HUD */}
-      <div style={{ position: "absolute", left: 16, bottom: 16, pointerEvents: "none", zIndex: 10, fontFamily: FONT.mono, lineHeight: 1.5 }}>
-        <div style={{ fontSize: 10, color: paused ? "#8a6a3a" : reverse ? "#5a7ab0" : "#3a6a3a" }}>
-          {paused ? "⏸ PAUSED" : reverse ? "◀◀ REWINDING" : "▶ RUNNING"}
-          {scenarioId !== "today" && <span style={{ color: "#6a6a80" }}> · {scenario.icon} {scenario.name}</span>}
-          {follow !== null && hud.bodies[follow] && <span style={{ color: "#6a6a80" }}> · 🎥 {hud.bodies[follow].name}</span>}
-        </div>
-        <div style={{ fontSize: 15, color: "#a8a8b8", fontFamily: FONT.display, fontWeight: 600, letterSpacing: "0.04em" }}>{hud.date}</div>
-        <div style={{ fontSize: 10, color: "#5a5a70" }}>
-          {hud.years >= 0 ? "+" : ""}{hud.years.toFixed(2)} yr{!paused && <> · {reverse ? "−" : ""}{formatRate(hud.rate)}</>}
-        </div>
-        {hud.limited && !paused && (
-          <div style={{ fontSize: 10, color: "#a07a40" }}>Top speed for this device — slower than requested</div>
-        )}
-      </div>
+      <TimeDock
+        paused={paused}
+        reverse={reverse}
+        speed={speed}
+        hud={hud}
+        onTogglePause={() => setPaused((p) => !p)}
+        onToggleReverse={() => setReverse((r) => !r)}
+        onSpeed={setSpeed}
+        onReset={reset}
+      />
 
       <button
+        type="button"
+        className={s.panelToggle}
         onClick={() => setPanelOpen((p) => !p)}
         aria-expanded={panelOpen}
-        style={{
-          position: "absolute", top: 12, right: panelOpen ? `calc(${panelW} + 6px)` : 12, zIndex: 20,
-          background: "rgba(20,20,30,0.7)", border: "1px solid rgba(80,80,100,0.3)",
-          color: "#8a8a9a", borderRadius: 6, padding: "6px 10px", cursor: "pointer",
-          fontSize: 12, fontFamily: FONT.sans, backdropFilter: "blur(8px)", transition: "right 0.3s ease",
-        }}
       >
-        {panelOpen ? "▸ Hide" : "◂ Controls"}
+        {panelOpen ? <Icon.close /> : <Icon.sliders />} {panelOpen ? "Close" : "Controls"}
       </button>
 
       <ControlPanel
         open={panelOpen}
         scenarioId={scenarioId}
         onScenario={(id) => loadScenario(id)}
-        settings={{ speed, paused, reverse, sunMass, jupMass, belts, distExp, sizeMult, showGrav, showTrails }}
+        settings={{ sunMass, jupMass, belts, distExp, sizeMult, showGrav, showTrails }}
         set={{
-          speed: setSpeed, paused: setPaused, reverse: setReverse, sunMass: setSunMass, jupMass: setJupMassByHand,
-          belt: setBelt, distExp: setDistExp, sizeMult: setSizeMult, showGrav: setShowGrav, showTrails: setShowTrails,
+          sunMass: setSunMass, jupMass: setJupMassByHand, belt: setBelt,
+          distExp: setDistExp, sizeMult: setSizeMult, showGrav: setShowGrav, showTrails: setShowTrails,
         }}
         hud={hud}
         selected={selected}
         follow={follow}
         onSelect={selectBody}
-        onReset={reset}
         onRecenter={recenter}
         onCopyLink={copyLink}
       />
@@ -496,12 +483,6 @@ export default function SolarSystem() {
           onClose={() => setSelected(null)}
         />
       )}
-
-      <GlobalStyles />
-      <style>{`
-        @media (max-width: ${NARROW_PX}px) { .hint { display: none; } }
-        @keyframes notice-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
-      `}</style>
     </div>
   );
 }

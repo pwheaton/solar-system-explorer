@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from 'next'
-import { DM_Sans, Oxanium, Source_Code_Pro } from 'next/font/google'
+import { Fraunces, IBM_Plex_Mono, Instrument_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
-const sourceCode = Source_Code_Pro({ subsets: ['latin'], variable: '--font-code' })
-const oxanium = Oxanium({ subsets: ['latin'], weight: ['400', '600', '700'], variable: '--font-display' })
+const fraunces = Fraunces({ subsets: ['latin'], axes: ['SOFT', 'opsz'], style: ['normal', 'italic'], variable: '--font-fraunces' })
+const instrument = Instrument_Sans({ subsets: ['latin'], variable: '--font-instrument' })
+const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-plex-mono' })
 
 export const metadata: Metadata = {
   title: 'Solar System Explorer',
@@ -22,15 +22,15 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#06060d',
+  themeColor: '#070a12',
   width: 'device-width',
   initialScale: 1,
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${sourceCode.variable} ${oxanium.variable}`}>
-      <body className="antialiased" style={{ margin: 0, background: '#06060d' }}>
+    <html lang="en" className={`${fraunces.variable} ${instrument.variable} ${plexMono.variable}`}>
+      <body className="antialiased" style={{ margin: 0, background: '#070a12' }}>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
