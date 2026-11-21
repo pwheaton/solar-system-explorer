@@ -3,9 +3,9 @@ import { PLANET_FACTS } from "@/lib/sim/planet-facts.js";
 import { FONT, InfoRow, panelStyle } from "./ui";
 
 /** Left-hand panel with live simulation data and facts for the selected body. */
-export default function PlanetInfo({ body, sun, yourWeight, setYourWeight, onClose }) {
-  const facts = PLANET_FACTS[body.name];
-  if (!facts) return null;
+export default function PlanetInfo({ body, sun, following, onFollow, yourWeight, setYourWeight, onClose }) {
+  // Scenario extras (rogue star, companion) have a description instead of a fact sheet.
+  const facts = PLANET_FACTS[body.name] || { type: body.type, funFact: body.description, moons: null };
 
   const distAU = Math.hypot(body.x - sun.x, body.y - sun.y);
   const velKmS = (Math.hypot(body.vx - sun.vx, body.vy - sun.vy) * AU_KM) / YEAR_S;
@@ -28,6 +28,18 @@ export default function PlanetInfo({ body, sun, yourWeight, setYourWeight, onClo
       </div>
 
       {!body.isSun && (
+        <button onClick={onFollow} aria-pressed={following} style={{
+          width: "100%", marginBottom: 10, padding: "6px 8px", borderRadius: 6, cursor: "pointer",
+          fontSize: 11, fontFamily: FONT.sans, fontWeight: 500,
+          background: following ? "rgba(200,168,78,0.15)" : "rgba(40,40,55,0.5)",
+          border: following ? "1px solid rgba(200,168,78,0.35)" : "1px solid rgba(60,60,80,0.4)",
+          color: following ? "#d8c070" : "#9a9aaa",
+        }}>
+          {following ? "🎥 Following — click to stop (F)" : `🎥 Follow ${body.name} (F)`}
+        </button>
+      )}
+
+      {!body.isSun && (
         <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#7a7a8a", lineHeight: 1.7, marginBottom: 10, padding: "6px 8px", background: "rgba(20,20,35,0.5)", borderRadius: 5 }}>
           <Live label="Distance from Sun" value={`${distAU.toFixed(3)} AU`} />
           <Live label="Speed" value={`${velKmS.toFixed(1)} km/s`} />
@@ -40,9 +52,11 @@ export default function PlanetInfo({ body, sun, yourWeight, setYourWeight, onClo
       <InfoRow label="🚀 Travel time" value={facts.travelTime} />
       <InfoRow label="🔄 Year length" value={facts.orbitalPeriod} />
       <InfoRow label="🌅 Day length" value={facts.dayLength} />
-      <InfoRow label="⚖️ Mass" value={facts.earthMasses !== 1 ? `${facts.earthMasses.toLocaleString()} × Earth` : "1 Earth (that's us)"} />
+      {facts.earthMasses != null && (
+        <InfoRow label="⚖️ Mass" value={facts.earthMasses !== 1 ? `${facts.earthMasses.toLocaleString()} × Earth` : "1 Earth (that's us)"} />
+      )}
       <InfoRow label="🧪 Made of" value={facts.composition} />
-      {facts.moons !== null && (
+      {facts.moons != null && (
         <InfoRow label="🌙 Moons" value={facts.moons === 0 ? "None" : `${facts.moons} — ${facts.moonNames}`} />
       )}
       {facts.rings && <InfoRow label="💍 Rings" value={facts.ringDesc || "Yes"} />}
@@ -74,7 +88,7 @@ export default function PlanetInfo({ body, sun, yourWeight, setYourWeight, onClo
       )}
 
       <div style={{ marginTop: 10, padding: 8, background: "rgba(75,95,232,0.06)", borderRadius: 5, border: "1px solid rgba(75,95,232,0.12)" }}>
-        <div style={{ fontSize: 10, color: "#7080b0", fontFamily: FONT.sans, fontWeight: 600, marginBottom: 3 }}>💡 Did you know?</div>
+        <div style={{ fontSize: 10, color: "#7080b0", fontFamily: FONT.sans, fontWeight: 600, marginBottom: 3 }}>{body.description ? "💡 About this scenario" : "💡 Did you know?"}</div>
         <div style={{ fontSize: 11, color: "#9098b8", fontFamily: FONT.sans, lineHeight: 1.5 }}>{facts.funFact}</div>
       </div>
     </div>
