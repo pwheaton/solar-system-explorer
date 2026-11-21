@@ -294,6 +294,13 @@ export default function SolarSystem() {
         const budget = Math.max(2, Math.min(PHYSICS_BUDGET_MS, displayFrame * 0.8 - perf.draw - perf.hud - perf.predict - perf.gravity));
         const tPhys = performance.now();
         const done = advance(sys, want, budget, o.reverse ? -1 : 1);
+        if (o.reverse && sys.stepCount <= sys.rewindFloor) {
+          // Rewind can only undo the most recent events; stop here.
+          optsRef.current.paused = true;
+          setPaused(true);
+          setReverse(false);
+          notify(`That's as far back as rewind goes: it remembers the last ${sys.maxHistory} launches and collisions.`, 6000);
+        }
         ema("physics", performance.now() - tPhys);
         ema("steps", done);
         carry -= done * DT;

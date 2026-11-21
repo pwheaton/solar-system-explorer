@@ -108,3 +108,20 @@ test("rewind stays exact with launched bodies and belts", () => {
   const errA = Math.max(...sys.belts.asteroids.x.map((v, i) => Math.abs(v - ast[i])));
   assert.ok(err < 1e-9 && errA < 1e-9, `bodies ${err}, asteroids ${errA}`);
 });
+
+test("rewind history is capped, and rewinding stops at the oldest event it still remembers", () => {
+  const sys = createSystem(DATE, 4);
+  sys.maxHistory = 20;
+  for (let k = 0; k < 30; k++) {
+    advance(sys, 10, Infinity, 1);
+    launch(sys, "asteroid", 2 + k * 0.05, 0, 0, 4); // one event every 10 steps
+  }
+  assert.equal(sys.history.length, 20, "only the newest 20 events are kept");
+  assert.equal(sys.rewindFloor, 100, "the 10th launch (at step 100) is the newest one dropped");
+  const before = sys.stepCount;
+  const done = advance(sys, 10000, Infinity, -1);
+  assert.equal(sys.stepCount, 100, "rewind stops at the floor");
+  assert.equal(done, before - 100);
+  assert.equal(advance(sys, 5, Infinity, -1), 0, "and won't go further");
+  assert.equal(advance(sys, 5, Infinity, 1), 5, "forward still works");
+});
