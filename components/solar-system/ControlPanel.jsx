@@ -108,7 +108,8 @@ export default function ControlPanel({
                 {d.name}
                 {follow === i && <span className={s.eyebrow} style={{ color: "var(--amber)" }}>following</span>}
                 <span className={s.bodyMeta}>
-                  {d.merged ? "merged" : d.a ? `${d.a.toFixed(1)} AU` : d.launched ? "yours" : d.isStar ? "star" : ""}
+                  {d.shattered ? "shattered" : d.merged ? "merged" : d.a ? `${d.a.toFixed(1)} AU`
+                    : d.fragment ? "chunk" : d.launched ? "yours" : d.isStar ? "star" : ""}
                 </span>
               </button>
             </li>
@@ -117,6 +118,11 @@ export default function ControlPanel({
       </Section>
 
       <Section index="06" title="Event log">
+        {hud.debris.pieces > 0 && (
+          <div className={s.beltStats}>
+            Debris: <b>{hud.debris.pieces.toLocaleString()}</b> pieces in {hud.debris.clouds} cloud{hud.debris.clouds > 1 ? "s" : ""}
+          </div>
+        )}
         {hud.log.length === 0 && hud.escaped.length === 0 ? (
           <p className={s.logEmpty}>Nothing dramatic yet. Try launching something (press <kbd>L</kbd>) or a chaos scenario.</p>
         ) : (

@@ -18,7 +18,7 @@ Every planet starts where it really is today, and the simulation pulls them all 
 - **Play with gravity.** The *Chaos lab* sliders change the Sun's and Jupiter's mass while everything is moving. Push Jupiter past about 80× and it ignites into a star.
 - **Watch the belts.** 2,500 asteroids and 1,500 Kuiper belt objects respond to the planets' gravity. The panel counts how many get flung out or fall into the Sun.
 - **Run a scenario.** Six one-click setups, described below.
-- **Throw your own.** Launch mode lets you drag to fling an asteroid, a planet, a second Jupiter or a red dwarf into the system. A dotted line predicts where it will go before you let go. Bodies that collide merge (mass and momentum conserved) with a flash, and the event log records what happened. Getting a planet into a stable orbit is harder than it looks.
+- **Throw your own.** Launch mode lets you drag to fling an asteroid, a planet, a second Jupiter or a red dwarf into the system. A dotted line predicts where it will go before you let go. Hit something hard enough and it shatters into chunks and a glowing debris cloud; gentle hits merge. The event log records what happened. Getting a planet into a stable orbit is harder than it looks.
 - **Rewind time.** The physics runs backwards exactly, so you can replay any disaster in reverse. Scenario events undo themselves too.
 - **Follow a planet.** The camera rides along with any body. Following Jupiter as the asteroid belt streams past is a good one.
 - **Learn about each world.** Click any planet for its "field guide": live distance and speed, temperature, day and year length, moons, whether you could stand on it, and what you'd weigh there.
@@ -65,9 +65,21 @@ This is a real [N-body simulation](https://en.wikipedia.org/wiki/N-body_simulati
 - **Time-reversible:** Verlet run with a negative time step retraces its path exactly, which is how rewind works. Asteroids take bigger steps than planets to save work, and those steps are split around the planet steps they span so they reverse exactly too. Running forward 2 years, flipping direction mid-step, and running back lands within about 10⁻¹² AU of the start.
 - **Real starting positions:** planets are placed using [JPL's approximate Keplerian orbital elements](https://ssd.jpl.nasa.gov/planets/approx_pos.html) for the current date, then shifted so the whole system's centre of mass is at rest. That way the system doesn't drift off screen.
 - **Asteroids are test particles:** they feel gravity from the Sun and planets but don't pull on anything themselves. That's a good approximation, since all the asteroids together weigh about 3% of our Moon, and it keeps thousands of them cheap to simulate.
-- **Collisions:** bodies merge when they come close, keeping total mass and momentum. The collision distance is much bigger than real planet sizes; at real sizes, collisions would almost never register. Collisions are part of the rewindable history: rewinding past one un-merges the bodies exactly, and playing forward makes it happen again at the same moment.
+- **Collisions:** what happens depends on how hard two bodies hit (see [Planetary impacts](#planetary-impacts) below). Collisions are detected at a distance much bigger than real planet sizes; at real sizes, they'd almost never register at this time step. The physics of each impact uses the bodies' *real* radii, though. Every collision is part of the rewindable history: rewinding past one un-does it exactly, and playing forward makes it happen again identically.
 - **Launches are history too:** rewind past the moment you threw something and it vanishes; play forward and it's thrown again. Launching after a rewind starts a new timeline, so anything you'd launched later is discarded.
 - **Speed is honest:** the simulation advances by real elapsed time, so it runs at the same speed on any screen. If a device can't keep up, the dock says "max for this device" instead of quietly slowing down.
+
+### Planetary impacts
+
+When two planets (or chunks, or things you've launched) collide, the outcome follows the scaling laws from planet-formation research ([Leinhardt & Stewart 2012](https://doi.org/10.1088/0004-637X/745/1/79)):
+
+1. **Real impact speed.** Gravity accelerates bodies on the way in, so even two planets drifting together hit at least at their mutual escape speed (about 11 km/s for two Earths).
+2. **Gentle impacts merge.** Below about 1.4× escape speed, gravity wins and the bodies become one, conserving mass and momentum.
+3. **Harder impacts shatter.** The impact energy per unit mass is compared with the energy needed to blow half the mass away (Q\*<sub>RD</sub>, about 6×10⁷ J/kg for two Earths). The "universal law" then gives how much the bigger body keeps: *M*<sub>largest</sub>/*M*<sub>total</sub> = 1 − *Q*<sub>R</sub>/(2*Q*\*<sub>RD</sub>). At 15 km/s two Earths keep about two-thirds; at 40 km/s almost nothing survives intact.
+4. **Fragments and debris.** The lost mass becomes up to five big chunks (real bodies with gravity, which can collide again) and a debris cloud of hundreds of particles. Ejecta are thrown mostly "downrange", at speeds around the remnant's escape speed. Anything slower falls straight back; anything faster leaves with the speed it has after climbing out of the gravity well. Debris glows white-hot, cools to orange and then to rock colour, spreads along the orbit into a ring, and gets swept up by whatever it runs into.
+5. **Stars swallow things.** Anything that hits the Sun or another star is absorbed. The log says how much energy it released: Earth falling in would release about **94 years** of the Sun's entire output in a few hours; Jupiter, about **30,000 years**' worth.
+
+Mass and momentum are conserved for the planets and chunks. The debris particles are treated as massless (like the asteroid belt), so their tiny share of the mass leaves the gravity calculation.
 
 ### What's simplified
 
@@ -108,7 +120,8 @@ The tests check what's easy to break without noticing:
 - planets start in the right place for a known date
 - energy stays constant over 10 years
 - Earth comes back to its starting point after one year
-- rewind retraces exactly, including through launches and collisions
+- rewind retraces exactly, including through launches, collisions and shattering impacts
+- impact outcomes match published scaling laws
 - belts reproduce from a seed
 - each scenario does what its description says
 
@@ -134,6 +147,7 @@ lib/sim/
   bodies.js               Sun, planets and Pluto with JPL orbital elements
   scenarios.js            Scenario definitions, timed events, mass ramps
   sandbox.js              Launch types, throw speed, path prediction
+  impacts.js              Impact outcomes: merge vs shatter, fragments, debris
   camera.js               World ↔ screen mapping, zoom, follow
   render.js               Canvas drawing
   planet-facts.js         Facts shown in the field guide

@@ -28,7 +28,7 @@ test("a collision merges bodies, conserving mass and momentum", () => {
   advance(sys, 500, Infinity, 1);
   const merge = sys.history.find((r) => r.kind === "merge");
   assert.ok(merge, "expected a collision");
-  assert.equal(merge.text, "Giant 1 crashed into Jupiter");
+  assert.match(merge.text, /^Giant 1 merged into Jupiter at \d+ km\/s$/);
   assert.equal(sys.bodies[index].removed, true);
   const after = totals(sys);
   assert.ok(Math.abs(after.m - before.m) < 1e-15);
