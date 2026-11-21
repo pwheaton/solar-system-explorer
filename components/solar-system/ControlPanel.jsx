@@ -90,19 +90,28 @@ export default function ControlPanel({
 
       <Section index="05" title="Bodies">
         <ul className={s.bodies}>
-          {hud.bodies.map((d, i) => !d.isSun && !d.hidden && (
-            <li key={d.name}>
-              <button type="button" className={s.body} onClick={() => onSelect(i)} aria-pressed={selected === i} data-gone={d.removed || undefined}>
-                <span className={s.bodyDot} style={{ background: d.color, boxShadow: d.isStar ? `0 0 8px ${d.color}` : undefined }} />
-                {d.name}
-                {follow === i && <span className={s.eyebrow} style={{ color: "var(--amber)" }}>following</span>}
-                <span className={s.bodyMeta}>
-                  {d.shattered ? "shattered" : d.merged ? "merged" : d.a ? `${d.a.toFixed(1)} AU`
-                    : d.fragment ? "chunk" : d.launched ? "yours" : d.isStar ? "star" : ""}
-                </span>
-              </button>
-            </li>
-          ))}
+          {hud.bodies.map((d, i) => {
+            if (d.isSun || d.hidden) return null;
+            const meta = d.shattered ? "shattered" : d.merged ? "merged" : d.a ? `${d.a.toFixed(1)} AU`
+              : d.fragment ? "chunk" : d.launched ? "yours" : d.isStar ? "star" : "";
+            return (
+              <li key={d.name}>
+                <button
+                  type="button"
+                  className={s.body}
+                  onClick={() => onSelect(i)}
+                  aria-pressed={selected === i}
+                  aria-label={[d.name, meta, follow === i && "following"].filter(Boolean).join(", ")}
+                  data-gone={d.removed || undefined}
+                >
+                  <span className={s.bodyDot} style={{ background: d.color, boxShadow: d.isStar ? `0 0 8px ${d.color}` : undefined }} />
+                  {d.name}
+                  {follow === i && <span className={s.eyebrow} style={{ color: "var(--amber)" }}>following</span>}
+                  <span className={s.bodyMeta}>{meta}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </Section>
 
