@@ -91,7 +91,13 @@ export default function SolarSystem() {
   });
 
   // ─── Notices (scenario intros, events) ─────────────────────────
-  const notify = useCallback((text, ms = 4000, title) => setNotice({ text, title, id: Math.random(), ms }), []);
+  // A notice with higher priority (a warning) isn't bumped by routine toasts until it expires.
+  const notify = useCallback((text, ms = 4000, title, priority = 0) => {
+    setNotice((current) => {
+      if (current && current.priority > priority && performance.now() < current.until) return current;
+      return { text, title, id: Math.random(), ms, priority, until: performance.now() + ms };
+    });
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const id = setTimeout(() => setNotice(null), notice.ms);
@@ -166,7 +172,7 @@ export default function SolarSystem() {
     if (url.overrides.sunMass != null && url.overrides.sunMass !== 1) changed.push(`the Sun at ${+url.overrides.sunMass.toFixed(2)}× mass`);
     if (url.overrides.jupMass != null && url.overrides.jupMass !== 1) changed.push(`Jupiter at ${+url.overrides.jupMass.toFixed(1)}× mass`);
     if (changed.length) {
-      notify(`This link starts with ${changed.join(" and ")}. Press R (or ↺) to restart with normal settings.`, 9000, "Heads up");
+      notify(`This link starts with ${changed.join(" and ")}. Press R (or ↺) to restart with normal settings.`, 9000, "Heads up", 2);
     }
     if (window.innerWidth >= NARROW_PX) setPanelOpen(true);
   }, [loadScenario]);
