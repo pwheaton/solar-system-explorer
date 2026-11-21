@@ -94,7 +94,7 @@ Mass and momentum are conserved for the planets and chunks. The debris particles
 
 ## Sharing links
 
-The URL updates as you change things, so you can copy it from the address bar or use **Controls → Copy link**. When you paste a link into a chat or social app, its preview image is a real snapshot of that scenario. The server runs the same simulation forward to its most dramatic moment and draws it. The parameters are:
+The URL updates as you change things, but only with what differs from the defaults: the normal "today" view is just the plain address. Change anything (a scenario, a mass, a belt) and that setting appears, along with the start date and belt seed so the link reproduces exactly what you saw. Copy it from the address bar or use **Controls → Copy link**. If a link starts with a changed Sun or Jupiter mass, a notice says so, and **R** restarts with normal settings. When you paste a link into a chat or social app, its preview image is a real snapshot of that scenario: the server runs the same simulation forward to its most dramatic moment and draws it. The parameters are:
 
 | Param | Meaning | Example |
 |---|---|---|
@@ -118,6 +118,8 @@ npx pnpm dev        # http://localhost:3000
 npx pnpm test       # physics and scenario tests (Node's built-in test runner)
 npx pnpm build      # production build
 ```
+
+Add `?perf=1` to the URL to see a timing overlay: frames per second, and how many milliseconds each frame spends on physics, drawing, path prediction and the panels.
 
 The tests check what's easy to break without noticing:
 - planets start in the right place for a known date

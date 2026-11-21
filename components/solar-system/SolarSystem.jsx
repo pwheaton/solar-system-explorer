@@ -75,6 +75,7 @@ export default function SolarSystem() {
   const cameraRef = useRef({ ...defaultCamera(), follow: null });
   const viewRef = useRef(null);
   const optsRef = useRef({});
+  const perfRef = useRef(null);
   // True while the Sun's mass was last set by a scenario event rather than by hand.
   // Event-driven values stay out of shared links (the event replays on its own).
   const sunByEventRef = useRef(false);
@@ -90,7 +91,13 @@ export default function SolarSystem() {
   });
 
   // ─── Notices (scenario intros, events) ─────────────────────────
-  const notify = useCallback((text, ms = 4000, title) => setNotice({ text, title, id: Math.random(), ms }), []);
+  // A notice with higher priority (a warning) isn't bumped by routine toasts until it expires.
+  const notify = useCallback((text, ms = 4000, title, priority = 0) => {
+    setNotice((current) => {
+      if (current && current.priority > priority && performance.now() < current.until) return current;
+      return { text, title, id: Math.random(), ms, priority, until: performance.now() + ms };
+    });
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const id = setTimeout(() => setNotice(null), notice.ms);
@@ -159,6 +166,14 @@ export default function SolarSystem() {
       date: url.date, seed: url.seed ?? randomSeed(), overrides: url.overrides, follow: url.follow,
       quiet: !url.scenario || url.scenario === "today",
     });
+    // A link (or a refresh) can bring back changed masses, which change what
+    // happens a lot. Say so, rather than let it look like a normal start.
+    const changed = [];
+    if (url.overrides.sunMass != null && url.overrides.sunMass !== 1) changed.push(`the Sun at ${+url.overrides.sunMass.toFixed(2)}× mass`);
+    if (url.overrides.jupMass != null && url.overrides.jupMass !== 1) changed.push(`Jupiter at ${+url.overrides.jupMass.toFixed(1)}× mass`);
+    if (changed.length) {
+      notify(`This link starts with ${changed.join(" and ")}. Press R (or ↺) to restart with normal settings.`, 9000, "Heads up", 2);
+    }
     if (window.innerWidth >= NARROW_PX) setPanelOpen(true);
   }, [loadScenario]);
 
@@ -176,14 +191,14 @@ export default function SolarSystem() {
   useEffect(() => {
     const id = setTimeout(() => {
       const qs = urlStateRef.current();
-      if (qs && qs !== window.location.search) window.history.replaceState(null, "", qs);
+      if (qs != null && qs !== window.location.search) window.history.replaceState(null, "", window.location.pathname + qs);
     }, 400);
     return () => clearTimeout(id);
   }, [scenarioId, sysVersion, speed, sunMass, jupMass, distExp, sizeMult, showTrails, showGrav, belts, follow]);
 
   const copyLink = useCallback(async () => {
     const qs = urlStateRef.current();
-    if (qs) window.history.replaceState(null, "", qs);
+    if (qs != null) window.history.replaceState(null, "", window.location.pathname + qs);
     try {
       await navigator.clipboard.writeText(window.location.href);
       return true;
@@ -229,7 +244,19 @@ export default function SolarSystem() {
     let inset = 0;       // animated: screen width covered by the control panel
     const announced = new WeakSet(); // collision records already shown as a toast
 
+    // Optional timing breakdown (?perf=1): exponential moving averages in ms.
+    const perfOn = new URLSearchParams(window.location.search).has("perf");
+    const perf = { interval: 16.7, physics: 0, steps: 0, predict: 0, gravity: 0, draw: 0, hud: 0, loop: 0 };
+    const ema = (key, v) => { perf[key] = perf[key] * 0.92 + v * 0.08; };
+    let tPrev = performance.now();
+    let displayFrame = 16.7; // shortest recent frame interval: the display's refresh period
+    let lastHud = 0;
+    if (perfOn) window.__perf = perf;
+
     function loop(now) {
+      const tLoop = performance.now();
+      ema("interval", tLoop - tPrev);
+      tPrev = tLoop;
       const o = optsRef.current;
       const sys = sysRef.current;
       const realDt = Math.min(0.1, (now - last) / 1000);
@@ -245,7 +272,15 @@ export default function SolarSystem() {
       if (!o.paused) {
         carry += o.speed * realDt;
         const want = Math.floor(carry / DT);
-        const done = advance(sys, want, PHYSICS_BUDGET_MS, o.reverse ? -1 : 1);
+        // Physics gets whatever's left of a frame after drawing, so slower
+        // devices run the simulation a little slower instead of dropping frames.
+        // The frame length comes from the display (8.3 ms at 120 Hz, 16.7 at 60).
+        displayFrame = Math.min(displayFrame * 1.002, Math.max(6, Math.min(17, perf.interval)));
+        const budget = Math.max(2, Math.min(PHYSICS_BUDGET_MS, displayFrame * 0.8 - perf.draw - perf.hud - perf.predict - perf.gravity));
+        const tPhys = performance.now();
+        const done = advance(sys, want, budget, o.reverse ? -1 : 1);
+        ema("physics", performance.now() - tPhys);
+        ema("steps", done);
         carry -= done * DT;
         const limited = done < want;
         if (limited) carry = 0; // don't build up a backlog we can never catch up on
@@ -286,7 +321,11 @@ export default function SolarSystem() {
 
       const view = makeView(w, h, cam, o.distExp, inset);
       viewRef.current = view;
+      if (process.env.NODE_ENV !== "production") window.__view = view;
+      const tGrav = performance.now();
       if (o.showGrav && frame % 3 === 0) updateGravityLayer(gravity, sys.bodies, view);
+      ema("gravity", performance.now() - tGrav);
+      const tPred = performance.now();
 
       // Launch preview: recompute the predicted path at most once per frame.
       const L = launchRef.current;
@@ -306,6 +345,8 @@ export default function SolarSystem() {
         };
       }
 
+      ema("predict", performance.now() - tPred);
+      const tDraw = performance.now();
       drawFrame(ctx, sys, view, {
         showGrav: o.showGrav, showTrails: o.showTrails, selected: o.selected,
         sizeMult: o.sizeMult, sunMult: o.sunMass, jupiterMult, zoom: cam.zoom,
@@ -321,7 +362,11 @@ export default function SolarSystem() {
         }
       }
 
-      if (frame % 6 === 0) {
+      ema("draw", performance.now() - tDraw);
+      const tHud = performance.now();
+      // Panels update ~7 times a second; more often just costs React work.
+      if (tLoop - lastHud > 140) {
+        lastHud = tLoop;
         if (sys.ramp && jupiterMult !== o.jupMass) setJupMass(jupiterMult);
         const date = new Date(sys.startDate.getTime() + sys.t * 365.25 * 86400000);
         const stats = {};
@@ -357,6 +402,18 @@ export default function SolarSystem() {
         });
       }
 
+      ema("hud", performance.now() - tHud);
+      ema("loop", performance.now() - tLoop);
+      if (perfOn && frame % 15 === 0 && perfRef.current) {
+        const p = perf;
+        const nParticles = sys.beltList.reduce((a, b) => a + b.n, 0);
+        const nBodies = sys.bodies.filter((b) => !b.removed).length;
+        perfRef.current.textContent =
+          `fps ${(1000 / p.interval).toFixed(0)}  frame ${p.interval.toFixed(1)}ms\n` +
+          `loop ${p.loop.toFixed(1)}  physics ${p.physics.toFixed(1)} (${p.steps.toFixed(0)} steps)\n` +
+          `draw ${p.draw.toFixed(1)}  predict ${p.predict.toFixed(1)}  grav ${p.gravity.toFixed(1)}  hud ${p.hud.toFixed(1)}\n` +
+          `bodies ${nBodies}  particles ${nParticles}`;
+      }
       frame++;
       raf = requestAnimationFrame(loop);
     }
@@ -643,6 +700,8 @@ export default function SolarSystem() {
         onRecenter={recenter}
         onCopyLink={copyLink}
       />
+
+      <pre ref={perfRef} className={s.perf} aria-hidden />
 
       {selBody && (
         <PlanetInfo

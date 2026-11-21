@@ -722,3 +722,11 @@ input:focus-visible {
   .shortcuts { left: 40px; bottom: 175px; max-height: calc(100dvh - 240px); background: rgba(9, 13, 24, 0.97); }
   .root[data-panel="open"] .shortcutsTab { opacity: 0; pointer-events: none; }
 }
+
+/* ?perf=1 timing overlay (empty, and so invisible, otherwise) */
+.perf {
+  position: absolute; top: 60px; left: 20px; z-index: 30; margin: 0; pointer-events: none;
+  font: 11px/1.5 var(--mono); color: #9fe0b8; background: rgba(0, 0, 0, 0.55); padding: 0;
+  white-space: pre;
+}
+.perf:not(:empty) { padding: 6px 9px; border-radius: 6px; }

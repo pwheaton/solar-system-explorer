@@ -63,6 +63,18 @@ test("mass changes made by scenario events stay out of links", () => {
   assert.ok(writeUrlState({ ...base, sunMass: 0.5, sunByEvent: false }).includes("sun=0.5"));
 });
 
+test("the default view is a plain URL; anything changed pins date and seed", () => {
+  const base = {
+    scenario: "today", date: DATE, seed: 42, speed: 0.1, sunMass: 1, jupMass: 1, distExp: 0.42, sizeMult: 1,
+    showTrails: true, showGrav: false, belts: { asteroids: true, kuiper: true }, follow: null,
+  };
+  assert.equal(writeUrlState(base), "");
+  assert.equal(writeUrlState({ ...base, sunMass: 3 }), "?d=2026-11-21&seed=42&sun=3");
+  // A scenario at its own default speed doesn't repeat the speed.
+  assert.equal(writeUrlState({ ...base, scenario: "flyby", speed: 2 }), "?s=flyby&d=2026-11-21&seed=42");
+  assert.equal(writeUrlState({ ...base, belts: { asteroids: true, kuiper: false } }), "?d=2026-11-21&seed=42&belts=a");
+});
+
 test("URL state round-trips", () => {
   const state = {
     scenario: "flyby", date: DATE, seed: 42, speed: 2, sunMass: 1, jupMass: 80, ramping: false,
@@ -74,8 +86,9 @@ test("URL state round-trips", () => {
   assert.equal(back.date.toISOString().slice(0, 10), "2026-11-21");
   assert.equal(back.seed, 42);
   assert.equal(back.follow, "Jupiter");
+  // speed 2 is the flyby's default, so it isn't written (or read back).
   assert.deepEqual(back.overrides, {
-    speed: 2, jupMass: 80, distExp: 0.6, sizeMult: 1.5, showTrails: false, showGrav: true,
+    jupMass: 80, distExp: 0.6, sizeMult: 1.5, showTrails: false, showGrav: true,
     belts: { asteroids: true, kuiper: false },
   });
 });
