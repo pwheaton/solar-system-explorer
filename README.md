@@ -116,9 +116,12 @@ You'll need [Node.js](https://nodejs.org/) 20 or newer. The project uses [pnpm](
 npx pnpm install
 npx pnpm dev        # http://localhost:3000
 npx pnpm lint       # ESLint (Next.js rules, including React hooks)
+npx pnpm typecheck  # type-check the simulation code (JSDoc types, see lib/sim/types.ts)
 npx pnpm test       # physics and scenario tests (Node's built-in test runner)
 npx pnpm build      # production build
 ```
+
+Browser smoke tests (`e2e/smoke.spec.ts`, [Playwright](https://playwright.dev/)) load the built site in Chromium, play scenarios, throw a planet and fail on any console error. They run in CI; to run them locally, `npx pnpm exec playwright install chromium`, then `npx pnpm build && npx pnpm test:e2e`.
 
 ### Physics runs in a background thread
 
@@ -135,7 +138,7 @@ The tests check what's easy to break without noticing:
 - belts reproduce from a seed
 - each scenario does what its description says
 
-They run on every pull request, along with lint and a production build with type checking (see `.github/workflows/ci.yml`).
+They run on every pull request, along with lint, the type check, a production build and the browser smoke tests (see `.github/workflows/ci.yml`).
 
 ### Project layout
 
@@ -144,7 +147,10 @@ app/
   layout.tsx              Fonts, page metadata
   page.tsx                Renders the simulator
 components/solar-system/
-  SolarSystem.jsx         Main component: render loop, input, URL sync
+  SolarSystem.jsx         Main component: state, scenario loading, layout
+  hooks/                  Render loop, pointer and keyboard input, URL sync, simulation host, notices
+  launchFromDrag.js       Turn a launch drag into a position and velocity
+  layout.js               Breakpoints and spacing shared by the hooks
   ControlPanel.jsx        Right-hand panel: scenarios, chaos lab, belts, view, bodies
   TimeDock.jsx            Bottom dock: play, rewind, speed, launch, date
   ShortcutsDrawer.jsx     Left-edge pull tab with keyboard shortcuts / gestures
@@ -157,7 +163,14 @@ lib/sim/
   host.js                 Runs the engine in a Web Worker, or on the main thread as a fallback
   sim.worker.js           The physics worker
   snapshot.js             What the worker sends the page each frame (and the page's "mirror")
-  physics.js              N-body integrator, belts, trails (time-reversible)
+  physics.js              Time-reversible stepping; re-exports the public simulation API
+  system.js               Building a system: bodies, barycentric frame, mass sliders
+  forces.js               Gravity for bodies and test particles
+  belts.js                Asteroid / Kuiper belts and impact debris
+  collisions.js           Detecting collisions and applying merges and shatters
+  history.js              Rewindable record of launches and collisions
+  trails.js               Orbit trails
+  types.ts                Shared data shapes for the JSDoc type checks
   ephemeris.js            Orbital elements → positions and velocities
   bodies.js               Sun, planets and Pluto with JPL orbital elements
   scenarios.js            Scenario definitions, timed events, mass ramps
@@ -171,6 +184,7 @@ lib/url-state.js          Read/write the setup in the URL
 lib/sim/scene.js          Simulated system → shapes for static images
 app/api/og/route.tsx      Link-preview image: runs the shared scenario and draws it
 tests/                    Physics and scenario tests
+e2e/                      Browser smoke tests (Playwright)
 ```
 
 The simulation code in `lib/sim/` has no React or browser dependencies apart from `render.js`, so you can run it straight from Node to test physics changes:
