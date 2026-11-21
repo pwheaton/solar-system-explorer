@@ -18,6 +18,7 @@ Every planet starts where it really is today, and the simulation pulls them all 
 - **Play with gravity.** The *Chaos lab* sliders change the Sun's and Jupiter's mass while everything is moving. Push Jupiter past about 80× and it ignites into a star.
 - **Watch the belts.** 2,500 asteroids and 1,500 Kuiper belt objects respond to the planets' gravity. The panel counts how many get flung out or fall into the Sun.
 - **Run a scenario.** Six one-click setups, described below.
+- **Throw your own.** Launch mode lets you drag to fling an asteroid, a planet, a second Jupiter or a red dwarf into the system. A dotted line predicts where it will go before you let go. Bodies that collide merge (mass and momentum conserved) with a flash, and the event log records what happened. Getting a planet into a stable orbit is harder than it looks.
 - **Rewind time.** The physics runs backwards exactly, so you can replay any disaster in reverse. Scenario events undo themselves too.
 - **Follow a planet.** The camera rides along with any body. Following Jupiter as the asteroid belt streams past is a good one.
 - **Learn about each world.** Click any planet for its "field guide": live distance and speed, temperature, day and year length, moons, whether you could stand on it, and what you'd weigh there.
@@ -49,6 +50,10 @@ Every planet starts where it really is today, and the simulation pulls them all 
 | Load a scenario | Controls → Scenarios | | `1`–`6` |
 | Trails · gravity map | Controls → View | | `T` · `G` |
 | Asteroid · Kuiper belt | Controls → Belts | | `A` · `K` |
+| Launch mode | ↗ Launch in the time dock | ↗ | `L` (`Esc` to leave) |
+| Throw a body (launch mode) | press, drag the way it should go, release | same | |
+| Circular orbit (launch mode) | click without dragging | tap | |
+| Pan while in launch mode | right-drag | two-finger drag | |
 | Restart from today | ↺ in the time dock | ↺ | `R` |
 
 ## How the physics works
@@ -60,6 +65,8 @@ This is a real [N-body simulation](https://en.wikipedia.org/wiki/N-body_simulati
 - **Time-reversible:** Verlet run with a negative time step retraces its path exactly, which is how rewind works. Asteroids take bigger steps than planets to save work, and those steps are split around the planet steps they span so they reverse exactly too. Running forward 2 years, flipping direction mid-step, and running back lands within about 10⁻¹² AU of the start.
 - **Real starting positions:** planets are placed using [JPL's approximate Keplerian orbital elements](https://ssd.jpl.nasa.gov/planets/approx_pos.html) for the current date, then shifted so the whole system's centre of mass is at rest. That way the system doesn't drift off screen.
 - **Asteroids are test particles:** they feel gravity from the Sun and planets but don't pull on anything themselves. That's a good approximation, since all the asteroids together weigh about 3% of our Moon, and it keeps thousands of them cheap to simulate.
+- **Collisions:** bodies merge when they come close, keeping total mass and momentum. The collision distance is much bigger than real planet sizes; at real sizes, collisions would almost never register. Collisions are part of the rewindable history: rewinding past one un-merges the bodies exactly, and playing forward makes it happen again at the same moment.
+- **Launches are history too:** rewind past the moment you threw something and it vanishes; play forward and it's thrown again. Launching after a rewind starts a new timeline, so anything you'd launched later is discarded.
 - **Speed is honest:** the simulation advances by real elapsed time, so it runs at the same speed on any screen. If a device can't keep up, the dock says "max for this device" instead of quietly slowing down.
 
 ### What's simplified
@@ -101,7 +108,7 @@ The tests check what's easy to break without noticing:
 - planets start in the right place for a known date
 - energy stays constant over 10 years
 - Earth comes back to its starting point after one year
-- rewind retraces exactly
+- rewind retraces exactly, including through launches and collisions
 - belts reproduce from a seed
 - each scenario does what its description says
 
@@ -116,7 +123,8 @@ app/
 components/solar-system/
   SolarSystem.jsx         Main component: simulation loop, input, URL sync
   ControlPanel.jsx        Right-hand panel: scenarios, chaos lab, belts, view, bodies
-  TimeDock.jsx            Bottom dock: play, rewind, speed, date
+  TimeDock.jsx            Bottom dock: play, rewind, speed, launch, date
+  LaunchBar.jsx           Launch mode: choose what to throw
   PlanetInfo.jsx          Field-guide card for the selected body
   ui.jsx                  Shared controls, icons, scenario glyphs
   styles.module.css       All UI styling ("modern orrery" theme)
@@ -125,6 +133,7 @@ lib/sim/
   ephemeris.js            Orbital elements → positions and velocities
   bodies.js               Sun, planets and Pluto with JPL orbital elements
   scenarios.js            Scenario definitions, timed events, mass ramps
+  sandbox.js              Launch types, throw speed, path prediction
   camera.js               World ↔ screen mapping, zoom, follow
   render.js               Canvas drawing
   planet-facts.js         Facts shown in the field guide

@@ -582,3 +582,84 @@ input:focus-visible {
   .root[data-panel="open"] .dock,
   .root[data-panel="open"] .notice { left: calc(50% - 160px); }
 }
+
+/* ─── Sandbox: launch button, launch bar, event log ───────────── */
+
+.launchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.launchBtn:hover { color: var(--text); border-color: var(--text-faint); }
+.launchBtn[aria-pressed="true"] { color: #1a1203; background: var(--amber); border-color: var(--amber); }
+
+.launchBar {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  z-index: 14;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 16px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  animation: notice-in 0.3s var(--ease);
+}
+.launchTypes { display: flex; gap: 4px; }
+.launchType {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+}
+.launchType:hover { color: var(--text); background: rgba(148, 163, 196, 0.06); }
+.launchType[aria-pressed="true"] { color: var(--text); background: var(--amber-soft); border-color: var(--amber-line); }
+.launchSwatch { border-radius: 50%; flex-shrink: 0; }
+.launchCount { font-family: var(--mono); font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.launchBar .close { align-self: center; margin-left: 0; }
+
+/* With a launch bar showing, notices sit above it. */
+.root:has(.launchBar) .notice { bottom: 166px; }
+
+.log { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 7px; }
+.logItem { display: grid; grid-template-columns: 62px 1fr; gap: 8px; font-size: 12.5px; line-height: 1.4; color: var(--text); }
+.logItem[data-kind="merge"] span:last-child::before { content: "✦ "; color: var(--chaos); }
+.logItem[data-kind="launch"] span:last-child::before { content: "↗ "; color: var(--amber); }
+.logItem[data-kind="escape"] span:last-child::before { content: "→ "; color: var(--cyan); }
+.logDate { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); padding-top: 1px; }
+.logEmpty { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-faint); }
+.logEmpty kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--text); }
+
+@media (max-width: 768px) {
+  .launchBtn { padding: 0; width: 36px; height: 36px; justify-content: center; }
+  .launchLabel { display: none; }
+  .root:has(.launchBar) .notice { bottom: auto; }
+  .launchBar {
+    left: 10px;
+    right: 10px;
+    bottom: 172px; /* clear of the two-row dock */
+    transform: none;
+    width: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .launchTypes { order: 3; width: 100%; overflow-x: auto; }
+  .root[data-panel="open"] .launchBar { opacity: 0; pointer-events: none; }
+}
