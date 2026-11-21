@@ -1,10 +1,8 @@
-"use client";
-
-import SolarSystem from '@/components/solar-system';
+import SolarSystem from "@/components/solar-system/SolarSystem";
 
 export default function Home() {
   return (
-    <main className="w-full h-screen bg-gray-900">
+    <main>
       <SolarSystem />
     </main>
   );
