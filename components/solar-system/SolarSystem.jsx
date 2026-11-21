@@ -30,6 +30,12 @@ const EMPTY_HUD = {
 };
 const ESCAPE_AU = 100;
 
+/** Keep developer switches like ?perf=1 when the URL is rewritten. */
+function withDevParams(qs) {
+  if (!new URLSearchParams(window.location.search).has("perf")) return qs;
+  return qs ? `${qs}&perf=1` : "?perf=1";
+}
+
 /** Turn a press-and-drag on screen into a launch: position and velocity relative to the Sun. */
 function launchFromDrag(sys, view, from, to) {
   const [hx, hy] = screenToWorld(view, from.x, from.y);
@@ -82,11 +88,15 @@ export default function SolarSystem() {
   // Launch drag in progress: { from, to, dirty, preview } in screen pixels.
   const launchRef = useRef(null);
   const launchModeRef = useRef(false);
-  launchModeRef.current = launchMode;
   const launchTypeRef = useRef(launchType);
-  launchTypeRef.current = launchType;
+  // Set when something the panels show changes outside the loop's own timing.
+  const hudDirtyRef = useRef(false);
 
+  // The animation loop and event handlers read the latest settings via refs,
+  // updated after each render (never during it).
   useEffect(() => {
+    launchModeRef.current = launchMode;
+    launchTypeRef.current = launchType;
     optsRef.current = { speed, sunMass, jupMass, distExp, sizeMult, showGrav, showTrails, paused, reverse, selected, panelOpen };
   });
 
@@ -119,6 +129,7 @@ export default function SolarSystem() {
 
   const selectBody = useCallback((index) => {
     setSelected(index);
+    hudDirtyRef.current = true; // show the card on the next frame, not the next HUD tick
     if (index !== null && window.innerWidth < NARROW_PX) setPanelOpen(false);
   }, []);
 
@@ -159,7 +170,10 @@ export default function SolarSystem() {
 
   const reset = useCallback(() => loadScenario(scenarioId, { quiet: true }), [loadScenario, scenarioId]);
 
-  // First load: restore from the URL if there's a shared link.
+  // First load: restore from the URL if there's a shared link. This has to
+  // happen after hydration (the URL and window size don't exist on the server),
+  // so setting state from an effect is the right tool here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const url = readUrlState(window.location.search);
     loadScenario(url.scenario || "today", {
@@ -175,19 +189,20 @@ export default function SolarSystem() {
       notify(`This link starts with ${changed.join(" and ")}. Press R (or ↺) to restart with normal settings.`, 9000, "Heads up", 2);
     }
     if (window.innerWidth >= NARROW_PX) setPanelOpen(true);
-  }, [loadScenario]);
+  }, [loadScenario, notify]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Keep the URL in sync so the address bar is always a shareable link.
   const urlState = () => {
     const sys = sysRef.current;
-    return sys && writeUrlState({
+    return sys && withDevParams(writeUrlState({
       scenario: scenarioId, date: sys.startDate, seed: sys.seed, speed, sunMass, jupMass,
       ramping: !!sys.ramp, sunByEvent: sunByEventRef.current, distExp, sizeMult, showTrails, showGrav, belts,
       follow: follow !== null ? sys.bodies[follow]?.name : null,
-    });
+    }));
   };
   const urlStateRef = useRef(urlState);
-  urlStateRef.current = urlState;
+  useEffect(() => { urlStateRef.current = urlState; });
   useEffect(() => {
     const id = setTimeout(() => {
       const qs = urlStateRef.current();
@@ -365,8 +380,9 @@ export default function SolarSystem() {
       ema("draw", performance.now() - tDraw);
       const tHud = performance.now();
       // Panels update ~7 times a second; more often just costs React work.
-      if (tLoop - lastHud > 140) {
+      if (tLoop - lastHud > 140 || hudDirtyRef.current) {
         lastHud = tLoop;
+        hudDirtyRef.current = false;
         if (sys.ramp && jupiterMult !== o.jupMass) setJupMass(jupiterMult);
         const date = new Date(sys.startDate.getTime() + sys.t * 365.25 * 86400000);
         const stats = {};
@@ -398,6 +414,13 @@ export default function SolarSystem() {
           })),
           escaped: sys.bodies.filter((b) => !b.isSun && !b.removed && Math.hypot(b.x - sun.x, b.y - sun.y) > ESCAPE_AU).map((b) => b.name),
           launched: launchedCount(sys),
+          // Snapshot of the selected body for the info card (render never reads the live sim).
+          selected: o.selected !== null && sys.bodies[o.selected] ? {
+            index: o.selected,
+            body: (({ name, color, x, y, vx, vy, mass, isSun, isStar, type, description }) =>
+              ({ name, color, x, y, vx, vy, mass, isSun, isStar, type, description }))(sys.bodies[o.selected]),
+            sun: { x: sun.x, y: sun.y, vx: sun.vx, vy: sun.vy },
+          } : null,
           debris: { clouds: debrisClouds, pieces: debrisPieces },
         });
       }
@@ -461,7 +484,7 @@ export default function SolarSystem() {
   }, [launchMode]);
 
   const pointerActions = useRef(null);
-  pointerActions.current = { selectBody, setFollow, doLaunch };
+  useEffect(() => { pointerActions.current = { selectBody, setFollow, doLaunch }; });
   useEffect(() => {
     const canvas = canvasRef.current;
     const pointers = new Map();
@@ -583,7 +606,9 @@ export default function SolarSystem() {
 
   // ─── Keyboard shortcuts ────────────────────────────────────────
   const keyActions = useRef(null);
-  keyActions.current = { reset, recenter, setBelt, belts, loadScenario, selected, follow, setFollow, toggleLaunchMode, launchMode, shortcutsOpen };
+  useEffect(() => {
+    keyActions.current = { reset, recenter, setBelt, belts, loadScenario, selected, follow, setFollow, toggleLaunchMode, launchMode, shortcutsOpen };
+  });
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -619,8 +644,8 @@ export default function SolarSystem() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const sys = sysRef.current;
-  const selBody = sys && selected !== null ? sys.bodies[selected] : null;
+  // The card shows the HUD's snapshot once it has caught up with the selection.
+  const selInfo = selected !== null && hud.selected?.index === selected ? hud.selected : null;
   const scenario = getScenario(scenarioId);
 
   return (
@@ -703,10 +728,10 @@ export default function SolarSystem() {
 
       <pre ref={perfRef} className={s.perf} aria-hidden />
 
-      {selBody && (
+      {selInfo && (
         <PlanetInfo
-          body={selBody}
-          sun={sys.bodies[0]}
+          body={selInfo.body}
+          sun={selInfo.sun}
           following={follow === selected}
           onFollow={() => setFollow(follow === selected ? null : selected)}
           yourWeight={yourWeight}

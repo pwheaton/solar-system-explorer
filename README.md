@@ -115,6 +115,7 @@ You'll need [Node.js](https://nodejs.org/) 20 or newer. The project uses [pnpm](
 ```bash
 npx pnpm install
 npx pnpm dev        # http://localhost:3000
+npx pnpm lint       # ESLint (Next.js rules, including React hooks)
 npx pnpm test       # physics and scenario tests (Node's built-in test runner)
 npx pnpm build      # production build
 ```
@@ -130,7 +131,7 @@ The tests check what's easy to break without noticing:
 - belts reproduce from a seed
 - each scenario does what its description says
 
-They run on every pull request, along with a production build (see `.github/workflows/ci.yml`).
+They run on every pull request, along with lint and a production build with type checking (see `.github/workflows/ci.yml`).
 
 ### Project layout
 

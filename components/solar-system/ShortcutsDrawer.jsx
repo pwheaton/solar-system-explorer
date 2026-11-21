@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Icon, styles as s } from "./ui";
 
 // Grouped by what you're trying to do. Each row: [keys or gesture, what it does].
@@ -53,19 +53,28 @@ const TOUCH = [
 
 const SEEN_KEY = "sse.shortcuts.seen";
 
+// Touch vs mouse, read from the browser the React way (false on the server).
+const COARSE = "(pointer: coarse)";
+const subscribePointer = (cb) => {
+  const mql = window.matchMedia(COARSE);
+  mql.addEventListener("change", cb);
+  return () => mql.removeEventListener("change", cb);
+};
+const isTouch = () => window.matchMedia(COARSE).matches;
+
 /** Pull tab on the left edge that slides out the shortcut list. */
 export default function ShortcutsDrawer({ open, onToggle, onClose }) {
-  const [touch, setTouch] = useState(false);
+  const touch = useSyncExternalStore(subscribePointer, isTouch, () => false);
   const [nudge, setNudge] = useState(false);
   const panelRef = useRef(null);
   const tabRef = useRef(null);
 
+  // Glow once for first-time visitors so the tab gets noticed. localStorage
+  // only exists after hydration, so this is set from an effect.
   useEffect(() => {
-    setTouch(window.matchMedia("(pointer: coarse)").matches);
-    // Glow once for first-time visitors so the tab gets noticed.
     try {
       if (!window.localStorage.getItem(SEEN_KEY)) {
-        setNudge(true);
+        setNudge(true); // eslint-disable-line react-hooks/set-state-in-effect
         window.localStorage.setItem(SEEN_KEY, "1");
       }
     } catch { /* storage blocked: skip the nudge */ }
