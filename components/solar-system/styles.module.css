@@ -641,6 +641,7 @@ input:focus-visible {
 .log { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 7px; }
 .logItem { display: grid; grid-template-columns: 62px 1fr; gap: 8px; font-size: 12.5px; line-height: 1.4; color: var(--text); }
 .logItem[data-kind="merge"] span:last-child::before { content: "✦ "; color: var(--chaos); }
+.logItem[data-kind="impact"] span:last-child::before { content: "✸ "; color: var(--chaos); }
 .logItem[data-kind="launch"] span:last-child::before { content: "↗ "; color: var(--amber); }
 .logItem[data-kind="escape"] span:last-child::before { content: "→ "; color: var(--cyan); }
 .logDate { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); padding-top: 1px; }

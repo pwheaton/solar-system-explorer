@@ -23,7 +23,10 @@ const NARROW_PX = 768;
 const CLICK_SLOP_PX = 5;
 const FOLLOW_ZOOM = 3;
 const PANEL_INSET_PX = 320; // control panel width plus its margin
-const EMPTY_HUD = { date: "", years: 0, rate: 0, limited: false, belts: {}, bodies: [], log: [], escaped: [], launched: 0 };
+const EMPTY_HUD = {
+  date: "", years: 0, rate: 0, limited: false, belts: {}, bodies: [], log: [], escaped: [], launched: 0,
+  debris: { clouds: 0, pieces: 0 },
+};
 const ESCAPE_AU = 100;
 
 /** Turn a press-and-drag on screen into a launch: position and velocity relative to the Sun. */
@@ -303,14 +306,14 @@ export default function SolarSystem() {
 
       drawFrame(ctx, sys, view, {
         showGrav: o.showGrav, showTrails: o.showTrails, selected: o.selected,
-        sizeMult: o.sizeMult, sunMult: o.sunMass, jupiterMult,
+        sizeMult: o.sizeMult, sunMult: o.sunMass, jupiterMult, zoom: cam.zoom,
         gravityLayer: gravity, labelFont, monoFont, launch: launchPreview,
       });
 
       // Toast each new collision once, as it happens.
       for (let k = 0; k < sys.historyIndex; k++) {
         const rec = sys.history[k];
-        if (rec.kind === "merge" && !announced.has(rec)) {
+        if ((rec.kind === "merge" || rec.kind === "impact") && !announced.has(rec)) {
           announced.add(rec);
           if (!o.reverse) notify(`${rec.text}.`, 3500);
         }
@@ -320,7 +323,15 @@ export default function SolarSystem() {
         if (sys.ramp && jupiterMult !== o.jupMass) setJupMass(jupiterMult);
         const date = new Date(sys.startDate.getTime() + sys.t * 365.25 * 86400000);
         const stats = {};
-        for (const [key, b] of Object.entries(sys.belts)) stats[key] = beltStats(b, sun);
+        let debrisClouds = 0, debrisPieces = 0;
+        for (const [key, b] of Object.entries(sys.belts)) {
+          if (b.debris) {
+            debrisClouds++;
+            debrisPieces += beltStats(b, sun).alive;
+          } else {
+            stats[key] = beltStats(b, sun);
+          }
+        }
         setHud({
           date: isNaN(date) ? "" : date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }),
           years: sys.t,
@@ -330,6 +341,7 @@ export default function SolarSystem() {
           bodies: sys.bodies.map((b) => ({
             name: b.name, color: b.color, isDwarf: b.isDwarf, isStar: b.isStar, isSun: b.isSun,
             removed: b.removed, a: b.el?.[0], launched: b.launched, merged: b.merged,
+            shattered: b.shattered, fragment: b.fragment,
             hidden: b.unborn || b.discarded,
           })),
           log: sys.history.slice(0, sys.historyIndex).slice(-12).reverse().map((r) => ({
@@ -339,6 +351,7 @@ export default function SolarSystem() {
           })),
           escaped: sys.bodies.filter((b) => !b.isSun && !b.removed && Math.hypot(b.x - sun.x, b.y - sun.y) > ESCAPE_AU).map((b) => b.name),
           launched: launchedCount(sys),
+          debris: { clouds: debrisClouds, pieces: debrisPieces },
         });
       }
 
