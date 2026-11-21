@@ -38,6 +38,8 @@ Every planet starts where it really is today, and the simulation pulls them all 
 
 ## Controls
 
+Everything below is also in the **Shortcuts** tab on the left edge of the screen (or press `?`). On phones and tablets it shows the touch gestures instead.
+
 | Action | Mouse / trackpad | Touch | Keyboard |
 |---|---|---|---|
 | Play / pause | ▶ in the time dock | ▶ | `Space` |
@@ -49,6 +51,7 @@ Every planet starts where it really is today, and the simulation pulls them all 
 | Recenter the view | Controls → View → Recenter | | `C` |
 | Load a scenario | Controls → Scenarios | | `1`–`6` |
 | Trails · gravity map | Controls → View | | `T` · `G` |
+| Show this list | Shortcuts tab (left edge) | Gestures tab | `?` |
 | Asteroid · Kuiper belt | Controls → Belts | | `A` · `K` |
 | Launch mode | ↗ Launch in the time dock | ↗ | `L` (`Esc` to leave) |
 | Throw a body (launch mode) | press, drag the way it should go, release | same | |
@@ -137,6 +140,7 @@ components/solar-system/
   SolarSystem.jsx         Main component: simulation loop, input, URL sync
   ControlPanel.jsx        Right-hand panel: scenarios, chaos lab, belts, view, bodies
   TimeDock.jsx            Bottom dock: play, rewind, speed, launch, date
+  ShortcutsDrawer.jsx     Left-edge pull tab with keyboard shortcuts / gestures
   LaunchBar.jsx           Launch mode: choose what to throw
   PlanetInfo.jsx          Field-guide card for the selected body
   ui.jsx                  Shared controls, icons, scenario glyphs

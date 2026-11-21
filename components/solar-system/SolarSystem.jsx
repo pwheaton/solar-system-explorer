@@ -16,6 +16,7 @@ import { readUrlState, writeUrlState } from "@/lib/url-state.js";
 import ControlPanel from "./ControlPanel";
 import PlanetInfo from "./PlanetInfo";
 import LaunchBar from "./LaunchBar";
+import ShortcutsDrawer from "./ShortcutsDrawer";
 import TimeDock from "./TimeDock";
 import { Icon, styles as s } from "./ui";
 
@@ -67,6 +68,7 @@ export default function SolarSystem() {
   const [notice, setNotice] = useState(null);
   const [launchMode, setLaunchMode] = useState(false);
   const [launchType, setLaunchType] = useState("planet");
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const canvasRef = useRef(null);
   const sysRef = useRef(null);
@@ -524,13 +526,14 @@ export default function SolarSystem() {
 
   // ─── Keyboard shortcuts ────────────────────────────────────────
   const keyActions = useRef(null);
-  keyActions.current = { reset, recenter, setBelt, belts, loadScenario, selected, follow, setFollow, toggleLaunchMode, launchMode };
+  keyActions.current = { reset, recenter, setBelt, belts, loadScenario, selected, follow, setFollow, toggleLaunchMode, launchMode, shortcutsOpen };
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = e.target?.tagName;
       if (tag === "TEXTAREA" || (tag === "INPUT" && e.target.type !== "range")) return;
       const k = keyActions.current;
+      if (e.key === "?" || (e.code === "Slash" && e.shiftKey)) { e.preventDefault(); setShortcutsOpen((o) => !o); return; }
       const digit = /^Digit([1-9])$/.exec(e.code);
       if (digit && SCENARIOS[digit[1] - 1]) { k.loadScenario(SCENARIOS[digit[1] - 1].id); return; }
       switch (e.code) {
@@ -548,7 +551,9 @@ export default function SolarSystem() {
           break;
         case "KeyL": k.toggleLaunchMode(); break;
         case "Escape":
-          if (k.launchMode) setLaunchMode(false); else setSelected(null);
+          if (k.shortcutsOpen) setShortcutsOpen(false);
+          else if (k.launchMode) setLaunchMode(false);
+          else setSelected(null);
           break;
         default: break;
       }
@@ -582,6 +587,12 @@ export default function SolarSystem() {
           {notice.title && <strong>{notice.title}. </strong>}{notice.text}
         </div>
       )}
+
+      <ShortcutsDrawer
+        open={shortcutsOpen}
+        onToggle={() => setShortcutsOpen((o) => !o)}
+        onClose={() => setShortcutsOpen(false)}
+      />
 
       {launchMode && (
         <LaunchBar

@@ -67,6 +67,7 @@ export const Icon = {
   target: () => <svg {...svgProps}><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1" fill="currentColor" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2" /></svg>,
   close: () => <svg {...svgProps} width={12} height={12}><path d="M4 4l8 8M12 4l-8 8" /></svg>,
   launch: () => <svg {...svgProps}><circle cx="4" cy="12" r="2" fill="currentColor" stroke="none" /><path d="M5.5 10.5 13 3" /><path d="M8.5 3H13v4.5" /></svg>,
+  keyboard: () => <svg {...svgProps}><rect x="1.5" y="4" width="13" height="8.5" rx="1.5" /><path d="M4 7h.01M6.5 7h.01M9 7h.01M11.5 7h.01M5 9.8h6" /></svg>,
   sliders: () => <svg {...svgProps}><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7" /><circle cx="10.5" cy="4.5" r="1.5" /><circle cx="5.5" cy="11.5" r="1.5" /></svg>,
 };
 

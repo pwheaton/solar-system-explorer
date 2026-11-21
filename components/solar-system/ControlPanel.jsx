@@ -4,17 +4,6 @@ import { BELTS } from "@/lib/sim/physics.js";
 import { SCENARIOS } from "@/lib/sim/scenarios.js";
 import { Chip, Icon, ScenarioGlyph, Section, Slider, styles as s } from "./ui";
 
-const KEYS = [
-  ["Space", "Play / pause"],
-  ["B", "Rewind"],
-  ["1–6", "Scenarios"],
-  ["F", "Follow selected"],
-  ["C", "Recenter view"],
-  ["G · T", "Gravity · trails"],
-  ["A · K", "Asteroids · Kuiper"],
-  ["L", "Launch mode"],
-  ["R", "Restart"],
-];
 
 export default function ControlPanel({
   open, scenarioId, onScenario, settings, set, hud, selected, follow, onSelect, onRecenter, onCopyLink,
@@ -144,12 +133,6 @@ export default function ControlPanel({
       </Section>
 
       <footer className={s.footer}>
-        <div className={s.eyebrow}>Keyboard</div>
-        <div className={s.keys}>
-          {KEYS.map(([k, v]) => (
-            <span key={k} style={{ display: "contents" }}><kbd>{k}</kbd><span>{v}</span></span>
-          ))}
-        </div>
         <div className={s.physics}>
           Velocity-Verlet N-body · dt = {DT} yr<br />
           Real starting positions from JPL orbital elements<br />
