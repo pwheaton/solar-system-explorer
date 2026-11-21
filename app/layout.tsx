@@ -11,7 +11,17 @@ const firaSans = Fira_Sans({
 })
 const firaMono = Fira_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-fira-mono' })
 
+// Absolute base for preview-image URLs: the production domain in production,
+// the deployment's own URL elsewhere.
+const siteUrl =
+  process.env.VERCEL_ENV === 'production' && process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000'
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'Solar System Explorer',
   description:
     'An interactive N-body simulation of the solar system, starting from the real positions of the planets today. Crank up the Sun or Jupiter and watch the asteroid belt fall apart.',

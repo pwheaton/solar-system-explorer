@@ -72,7 +72,7 @@ This is a real [N-body simulation](https://en.wikipedia.org/wiki/N-body_simulati
 
 ## Sharing links
 
-The URL updates as you change things, so you can copy it from the address bar or use **Controls → Copy link**. The parameters are:
+The URL updates as you change things, so you can copy it from the address bar or use **Controls → Copy link**. When you paste a link into a chat or social app, its preview image is a real snapshot of that scenario. The server runs the same simulation forward to its most dramatic moment and draws it. The parameters are:
 
 | Param | Meaning | Example |
 |---|---|---|
@@ -93,8 +93,19 @@ You'll need [Node.js](https://nodejs.org/) 20 or newer. The project uses [pnpm](
 ```bash
 npx pnpm install
 npx pnpm dev        # http://localhost:3000
+npx pnpm test       # physics and scenario tests (Node's built-in test runner)
 npx pnpm build      # production build
 ```
+
+The tests check what's easy to break without noticing:
+- planets start in the right place for a known date
+- energy stays constant over 10 years
+- Earth comes back to its starting point after one year
+- rewind retraces exactly
+- belts reproduce from a seed
+- each scenario does what its description says
+
+They run on every pull request, along with a production build (see `.github/workflows/ci.yml`).
 
 ### Project layout
 
@@ -119,6 +130,9 @@ lib/sim/
   planet-facts.js         Facts shown in the field guide
   constants.js, rng.js    Units, tuning, seeded random numbers
 lib/url-state.js          Read/write the setup in the URL
+lib/sim/scene.js          Simulated system → shapes for static images
+app/api/og/route.tsx      Link-preview image: runs the shared scenario and draws it
+tests/                    Physics and scenario tests
 ```
 
 The simulation code in `lib/sim/` has no React or browser dependencies apart from `render.js`, so you can run it straight from Node to test physics changes:

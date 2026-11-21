@@ -46,6 +46,9 @@ export default function SolarSystem() {
   const cameraRef = useRef({ ...defaultCamera(), follow: null });
   const viewRef = useRef(null);
   const optsRef = useRef({});
+  // True while the Sun's mass was last set by a scenario event rather than by hand.
+  // Event-driven values stay out of shared links (the event replays on its own).
+  const sunByEventRef = useRef(false);
 
   useEffect(() => {
     optsRef.current = { speed, sunMass, jupMass, distExp, sizeMult, showGrav, showTrails, paused, reverse, selected, panelOpen };
@@ -92,6 +95,7 @@ export default function SolarSystem() {
     setSysVersion((v) => v + 1);
     setSpeed(s.speed);
     setSunMass(s.sunMass);
+    sunByEventRef.current = false;
     setJupMass(s.jupMass);
     setDistExp(s.distExp);
     setSizeMult(s.sizeMult);
@@ -128,7 +132,7 @@ export default function SolarSystem() {
     const sys = sysRef.current;
     return sys && writeUrlState({
       scenario: scenarioId, date: sys.startDate, seed: sys.seed, speed, sunMass, jupMass,
-      ramping: !!sys.ramp, distExp, sizeMult, showTrails, showGrav, belts,
+      ramping: !!sys.ramp, sunByEvent: sunByEventRef.current, distExp, sizeMult, showTrails, showGrav, belts,
       follow: follow !== null ? sys.bodies[follow]?.name : null,
     });
   };
@@ -155,6 +159,11 @@ export default function SolarSystem() {
 
   const setBelt = useCallback((key, on) => setBelts((b) => ({ ...b, [key]: on })), []);
 
+  const setSunMassByHand = useCallback((v) => {
+    sunByEventRef.current = false;
+    setSunMass(v);
+  }, []);
+
   // Moving the Jupiter slider by hand takes over from a scenario's mass ramp.
   const setJupMassByHand = useCallback((v) => {
     if (sysRef.current) sysRef.current.ramp = null;
@@ -173,7 +182,7 @@ export default function SolarSystem() {
     // What scenario events are allowed to change.
     const ctl = {
       get sys() { return sysRef.current; },
-      setSunMass: (v) => { optsRef.current.sunMass = v; setSunMass(v); },
+      setSunMass: (v) => { optsRef.current.sunMass = v; sunByEventRef.current = true; setSunMass(v); },
     };
 
     let raf;
@@ -461,7 +470,7 @@ export default function SolarSystem() {
         onScenario={(id) => loadScenario(id)}
         settings={{ sunMass, jupMass, belts, distExp, sizeMult, showGrav, showTrails }}
         set={{
-          sunMass: setSunMass, jupMass: setJupMassByHand, belt: setBelt,
+          sunMass: setSunMassByHand, jupMass: setJupMassByHand, belt: setBelt,
           distExp: setDistExp, sizeMult: setSizeMult, showGrav: setShowGrav, showTrails: setShowTrails,
         }}
         hud={hud}
